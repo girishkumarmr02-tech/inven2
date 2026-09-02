@@ -1,0 +1,4596 @@
+Absolutely. Since you are automating an Angular + PrimeNG ERP application with Selenium Java, you do not need to become a full Angular developer. You need the subset of Angular/PrimeNG knowledge that lets you:
+
+Understand the DOM.
+Identify the real interactive element.
+Build stable XPath/CSS locators.
+Understand why elements become hidden/dynamic.
+Handle PrimeNG dropdowns, tables, dialogs, calendars, overlays, etc.
+Diagnose Selenium exceptions quickly.
+Build reusable automation methods rather than one-off locators.
+Angular components combine a TypeScript class, HTML template and component selector, and Angular dynamically updates the rendered DOM from that template. 
+
+1. The mental model you should have
+When you see this:
+
+
+<p-select
+    [options]="products"
+    [(ngModel)]="selectedProduct"
+    optionLabel="name">
+</p-select>
+
+Do not think:
+
+
+
+"I need to find <p-select>."
+Think:
+
+"This is an Angular component. I need to inspect what DOM PrimeNG actually rendered and find the element Selenium should interact with."
+This distinction is extremely important.
+
+Conceptually:
+
+Angular application
+       │
+       ▼
+Component
+       │
+       ├── TypeScript
+       │
+       └── HTML Template
+               │
+               ▼
+        PrimeNG Component
+               │
+               ▼
+        Rendered Browser DOM
+               │
+               ▼
+          Selenium sees this
+
+Angular components have a host element and a rendered view. 
+
+2. Angular knowledge required for Selenium
+You should learn these Angular concepts in roughly this order:
+
+PriorityAngular conceptAutomation importance⭐⭐⭐⭐⭐ComponentsVery high⭐⭐⭐⭐⭐TemplatesVery high⭐⭐⭐⭐⭐Data bindingVery high⭐⭐⭐⭐⭐Dynamic DOMVery high⭐⭐⭐⭐⭐DirectivesVery high⭐⭐⭐⭐⭐*ngIf / @ifVery high⭐⭐⭐⭐⭐*ngFor / @forVery high⭐⭐⭐⭐⭐Component selectorsVery high⭐⭐⭐⭐⭐AttributesVery high⭐⭐⭐⭐⭐Event handlingHigh⭐⭐⭐⭐FormsHigh⭐⭐⭐⭐Reactive formsHigh⭐⭐⭐⭐Angular lifecycleHigh⭐⭐⭐ServicesMedium⭐⭐⭐RoutingMedium⭐⭐Dependency injectionLow for locator work⭐⭐SignalsUseful for understanding dynamic updates
+
+Angular templates support bindings, event listeners, dynamic properties/attributes and control flow, which explains why the browser DOM can change after page load. 
+
+3. Angular Components
+Suppose developers write:
+
+
+<app-product-details></app-product-details>
+
+That is an Angular component.
+
+You may see:
+
+
+<app-product-details _ngcontent-ng-c123>
+</app-product-details>
+
+Or:
+
+
+<xbs-dcloud-dropdown-group>
+    ...
+</xbs-dcloud-dropdown-group>
+
+These are component/custom-element boundaries.
+
+Important
+The outer component is not necessarily the clickable element.
+
+For example:
+
+
+<xbs-dcloud-dropdown-group>
+    <p-dropdown>
+        <div>
+            <span role="combobox">
+                Product
+            </span>
+        </div>
+    </p-dropdown>
+</xbs-dcloud-dropdown-group>
+
+Selenium should probably interact with:
+
+
+//span[@role='combobox']
+
+rather than:
+
+
+//xbs-dcloud-dropdown-group
+
+Rule
+Locate the element that performs the user action, not merely the Angular component that owns it.
+
+4. Angular template vs browser DOM
+This is one of the most important concepts for you.
+
+Developers might write:
+
+
+<p-dropdown
+    [options]="products"
+    [(ngModel)]="product">
+</p-dropdown>
+
+But Chrome DevTools may show something substantially different.
+
+You might see:
+
+
+<p-dropdown class="p-element">
+    <div class="p-dropdown">
+        <span
+            role="combobox"
+            aria-haspopup="listbox"
+            aria-expanded="false">
+        </span>
+    </div>
+</p-dropdown>
+
+The HTML in the source/template and the final rendered DOM are not necessarily identical.
+
+For Selenium
+Always prioritize:
+
+Rendered DOM
+      ↓
+HTML structure
+      ↓
+Stable attributes
+      ↓
+Relationships
+      ↓
+XPath
+
+Not:
+
+Angular source
+      ↓
+Guess XPath
+
+5. Angular data binding
+You will frequently see:
+
+
+<input [value]="productName">
+
+or:
+
+
+<button [disabled]="isSaving">
+
+or:
+
+
+<div [class.active]="selected">
+
+The square brackets mean Angular property binding. Angular uses bindings to dynamically update DOM properties and attributes. 
+
+Automation implication
+This:
+
+
+<button [disabled]="isSaving">
+
+may become:
+
+
+<button disabled>
+
+or:
+
+
+<button>
+
+depending on application state.
+
+Therefore, Selenium should usually wait for the current state, rather than assume the element is immediately interactable.
+
+6. Angular event binding
+You may see:
+
+
+<button (click)="saveProduct()">
+
+or:
+
+
+<input (keyup)="search()">
+
+or:
+
+
+<div (mouseenter)="showMenu()">
+
+This tells you something important:
+
+The UI is state-driven.
+
+Clicking something may cause:
+
+Click
+  ↓
+Angular event
+  ↓
+TypeScript method
+  ↓
+API call
+  ↓
+Angular state update
+  ↓
+DOM changes
+
+Therefore:
+
+
+element.click();
+element2.click();
+
+is often unreliable when done immediately.
+
+You need synchronization:
+
+
+wait.until(ExpectedConditions.visibilityOfElementLocated(locator));
+
+or:
+
+
+wait.until(ExpectedConditions.elementToBeClickable(locator));
+
+7. Angular @if / *ngIf
+Older Angular applications commonly use:
+
+
+<div *ngIf="showProduct">
+    Product Details
+</div>
+
+Modern Angular also has:
+
+
+@if (showProduct) {
+    <div>
+        Product Details
+    </div>
+}
+
+This means the element may not exist in the DOM at all until the condition becomes true.
+
+So:
+
+
+driver.findElement(locator);
+
+may fail because the element hasn't been rendered yet.
+
+Use:
+
+
+wait.until(
+    ExpectedConditions.presenceOfElementLocated(locator)
+);
+
+Then, if necessary:
+
+
+wait.until(
+    ExpectedConditions.visibilityOfElementLocated(locator)
+);
+
+Angular's control-flow/template system can create and remove DOM content dynamically. 
+
+8. Angular *ngFor / @for
+This is extremely important for ERP tables.
+
+Example:
+
+
+<tr *ngFor="let product of products">
+    <td>{{product.name}}</td>
+</tr>
+
+or modern Angular:
+
+
+@for (product of products; track product.id) {
+    <tr>
+        <td>{{product.name}}</td>
+    </tr>
+}
+
+The browser might end up with:
+
+
+<tbody>
+    <tr>
+        <td>Coffee</td>
+    </tr>
+
+    <tr>
+        <td>Wheat</td>
+    </tr>
+
+    <tr>
+        <td>Rice</td>
+    </tr>
+</tbody>
+
+Bad locator
+
+//tbody/tr[2]
+
+This is fragile.
+
+Better
+
+//tbody/tr[td[normalize-space()='Coffee']]
+
+Or:
+
+
+//tbody/tr[.//span[normalize-space()='Coffee']]
+
+This is data-driven locating.
+
+9. Learn Angular directives
+Angular directives add behavior to elements/components. There are attribute directives and structural directives, and components are also a type of directive conceptually. 
+
+Common things you'll see:
+
+
+*ngIf
+*ngFor
+[ngClass]
+[ngStyle]
+formControl
+formControlName
+ngModel
+
+For automation, especially understand:
+
+ngIf
+ngFor
+ngModel
+formControl
+formControlName
+
+10. Angular forms
+You may see:
+
+
+<input
+    formControlName="productName">
+
+or:
+
+
+<p-select
+    formControlName="product">
+</p-select>
+
+This tells you the field is connected to an Angular form.
+
+The important thing for Selenium is:
+
+
+
+formControlName is useful contextual information, but don't automatically assume it is the best locator.
+For example:
+
+
+//*[@formcontrolname='product']
+
+can be good if stable.
+
+But:
+
+
+//*[@formcontrolname='product']//span[@role='combobox']
+
+may be necessary for a custom PrimeNG component.
+
+11. PrimeNG — the most important part for your project
+PrimeNG is a UI component library for Angular.
+
+Instead of developers creating every component manually:
+
+
+<select>
+
+they can use:
+
+
+<p-select>
+
+PrimeNG provides components such as:
+
+Select
+Dropdown
+Table
+Calendar
+DatePicker
+Input
+Button
+Dialog
+Checkbox
+RadioButton
+MultiSelect
+AutoComplete
+Toast
+ConfirmDialog
+Menu
+Tabs
+
+The current PrimeNG Select documentation describes Select as a component for choosing an item from a collection and supports options, labels, values, filtering, grouping and templating. 
+
+12. The golden rule for PrimeNG
+When inspecting PrimeNG:
+
+Do not stop at:
+
+<p-dropdown>
+
+Go deeper.
+
+For example:
+
+<p-dropdown>
+    ↓
+<div class="p-dropdown">
+    ↓
+<span role="combobox">
+
+Your Selenium target may be:
+
+
+//span[@role='combobox']
+
+This is why understanding component structure is much more valuable than memorizing XPath syntax.
+
+13. PrimeNG dropdown anatomy
+You may encounter something like:
+
+
+<p-dropdown>
+    <div class="p-dropdown">
+        <span
+            role="combobox"
+            aria-haspopup="listbox"
+            aria-expanded="false">
+        </span>
+    </div>
+</p-dropdown>
+
+When opened:
+
+
+<ul role="listbox">
+    <li role="option" aria-label="AC A">
+        AC A
+    </li>
+
+    <li role="option" aria-label="AC B">
+        AC B
+    </li>
+</ul>
+
+So there are two different locator problems.
+
+Dropdown control
+
+//span[@role='combobox']
+
+Dropdown option
+
+//li[@role='option' and normalize-space(@aria-label)='AC A']
+
+PrimeNG's Select component uses a collection of options and supports customizable option rendering. 
+
+14. Why role is extremely valuable
+You should learn these attributes:
+
+role
+aria-label
+aria-expanded
+aria-haspopup
+aria-selected
+aria-controls
+aria-labelledby
+
+Example:
+
+
+<span
+    role="combobox"
+    aria-haspopup="listbox"
+    aria-expanded="false">
+
+This is often better than:
+
+
+//span[@class='p-dropdown-label p-inputtext']
+
+because CSS classes may change with PrimeNG versions or application styling.
+
+Prefer
+
+//span[@role='combobox']
+
+over:
+
+
+//span[contains(@class,'p-dropdown-label')]
+
+when the role is unique and stable.
+
+15. aria-expanded is extremely useful
+Before opening:
+
+
+aria-expanded="false"
+
+After opening:
+
+
+aria-expanded="true"
+
+This gives you an excellent synchronization mechanism.
+
+For example:
+
+
+WebElement dropdown = wait.until(
+    ExpectedConditions.elementToBeClickable(locator)
+);
+
+dropdown.click();
+
+wait.until(ExpectedConditions.attributeToBe(
+    dropdown,
+    "aria-expanded",
+    "true"
+));
+
+This is often better than simply:
+
+
+Thread.sleep(2000);
+
+16. PrimeNG overlay concept
+This is one of the biggest sources of Selenium problems.
+
+Suppose your dropdown is here:
+
+Product Details
+    ↓
+Table
+    ↓
+Product cell
+    ↓
+PrimeNG dropdown
+
+You click it.
+
+The options might not remain inside the same <td>.
+
+Instead, PrimeNG may render the popup in an overlay container elsewhere in the DOM.
+
+Conceptually:
+
+TABLE
+ └── TD
+      └── p-dropdown
+           └── combobox
+
+
+BODY
+ └── overlay container
+      └── listbox
+           ├── option
+           ├── option
+           └── option
+
+This is why this can fail:
+
+
+//td[... ]//li[@role='option']
+
+while this works:
+
+
+//li[@role='option']
+
+This is critical PrimeNG knowledge.
+
+17. Hidden duplicate overlays
+You may see:
+
+
+<ul role="listbox" style="display:none">
+
+and another:
+
+
+<ul role="listbox">
+
+Both exist in DOM.
+
+Therefore:
+
+
+//li[@role='option']
+
+may return:
+
+2 of 2
+
+or more.
+
+Even if your dropdown locator is:
+
+1 of 1
+
+the option locator can still have multiple matches.
+
+That's why we discussed filtering:
+
+
+WebElement visibleOption = wait.until(driver ->
+    driver.findElements(option)
+        .stream()
+        .filter(WebElement::isDisplayed)
+        .findFirst()
+        .orElse(null)
+);
+
+This is a very useful PrimeNG automation pattern.
+
+18. PrimeNG table anatomy
+Your ERP application appears to have tables such as:
+
+Product Details
+-----------------------------------------------
+Product | Packing | UOM | Quantity | Price
+-----------------------------------------------
+Coffee  | Bag     | KG  | 100      | 500
+
+DOM could look like:
+
+
+<table>
+    <thead>
+        <tr>
+            <th>
+                <span>Product</span>
+            </th>
+
+            <th>
+                <span>Packing</span>
+            </th>
+
+            <th>
+                <span>UOM</span>
+            </th>
+        </tr>
+    </thead>
+
+    <tbody>
+        <tr>
+            <td>...</td>
+            <td>...</td>
+            <td>...</td>
+        </tr>
+    </tbody>
+</table>
+
+19. Your best table locator strategy
+Don't use:
+
+
+//td[5]
+
+unless absolutely necessary.
+
+Instead:
+
+Table
+ ↓
+Header name
+ ↓
+Determine column position
+ ↓
+Go to same position in tbody
+
+This is exactly the approach you've already started using.
+
+For example:
+
+
+//h3[normalize-space()='Product Details']
+/following::table[1]
+
+gets the table.
+
+Then:
+
+
+//h3[normalize-space()='Product Details']
+/following::table[1]
+/thead//th[
+    .//span[normalize-space()='Product']
+]
+
+finds the Product header.
+
+Then calculate its column index.
+
+This makes your automation resistant to column rearrangement.
+
+20. Your generic table-column strategy
+Your generic locator can be conceptually:
+
+getTableDropdown(tableName, columnName)
+
+Example:
+
+
+getTableDropdown("Product Details", "Product");
+
+or:
+
+
+getTableDropdown("Product Details", "Packing");
+
+or:
+
+
+getTableDropdown("Commission Details",
+                 "Commission Agent / Broker");
+
+That is significantly better than creating:
+
+
+productDropdown
+packingDropdown
+uomDropdown
+commissionAgentDropdown
+targetTypeDropdown
+
+individually.
+
+21. Learn XPath axes deeply
+For your project, these are essential:
+
+child
+parent
+ancestor
+descendant
+following
+following-sibling
+preceding
+preceding-sibling
+
+Child
+
+//div/button
+
+Descendant
+
+//div//button
+
+Parent
+
+//span/..
+
+Ancestor
+
+//span/ancestor::div[1]
+
+Following
+
+//h3/following::table[1]
+
+Following sibling
+
+//th[1]/following-sibling::th
+
+Preceding sibling
+
+//th[normalize-space()='Product']/preceding-sibling::th
+
+Your current table locator heavily relies on:
+
+
+preceding-sibling::th
+
+and that's a good approach.
+
+22. Understand . in XPath
+You asked about this previously, and it's very important.
+
+Consider:
+
+
+//p-card[.//span[contains(text(),'General')]]
+
+The . means:
+
+
+
+Start searching from the current p-card.
+Without .:
+
+
+//p-card[//span[contains(text(),'General')]]
+
+means something much broader:
+
+
+
+Find p-card if a matching span exists anywhere in the document.
+That's why:
+
+
+//p-card[.//span[normalize-space()='General']]
+
+is much better.
+
+23. text() vs . vs normalize-space()
+Fragile
+
+//span[text()='Product']
+
+Could fail because:
+
+
+<span>
+    Product
+</span>
+
+or nested markup:
+
+
+<span>
+    <b>Product</b>
+</span>
+
+Better
+
+//span[normalize-space()='Product']
+
+More flexible
+
+//span[contains(normalize-space(),'Product')]
+
+If text is nested
+
+//*[normalize-space(.)='Product']
+
+You should use normalize-space() heavily in your application.
+
+24. Angular generated attributes
+You will probably see:
+
+
+_ngcontent-ng-c123
+_nghost-ng-c123
+
+Avoid:
+
+
+//*[@_ngcontent-ng-c123]
+
+These are implementation-generated Angular attributes and are poor long-term locator choices.
+
+Instead use:
+
+
+//h3[normalize-space()='Product Details']
+
+or:
+
+
+//span[@role='combobox']
+
+or:
+
+
+//*[@aria-label='Product']
+
+or relationships between stable business labels.
+
+25. PrimeNG CSS classes
+You'll see classes like:
+
+p-element
+p-component
+p-dropdown
+p-inputtext
+p-button
+p-datatable
+
+Be careful.
+
+Bad
+
+//*[@class='p-element']
+
+Why?
+
+Because many elements may have:
+
+p-element
+
+and PrimeNG can add/remove classes.
+
+Better
+
+//span[@role='combobox']
+
+or:
+
+
+//button[@type='button' and @aria-label='Save']
+
+Use classes mainly when they provide useful context.
+
+26. Attribute matching
+Learn these very well.
+
+Exact
+
+//*[@aria-label='Product']
+
+Starts with
+
+//*[starts-with(@class,'p-element')]
+
+Contains
+
+//*[contains(@class,'dropdown')]
+
+Multiple conditions
+
+//span[
+    @role='combobox'
+    and @aria-haspopup='listbox'
+]
+
+Negation
+
+//button[not(@disabled)]
+
+27. Dynamic Angular attributes
+Suppose:
+
+
+id="dropdown_123456"
+
+Don't necessarily use:
+
+
+//*[@id='dropdown_123456']
+
+If it changes every run, it is useless.
+
+Instead inspect:
+
+aria-label
+role
+name
+formcontrolname
+placeholder
+business text
+parent relationship
+table/header relationship
+
+28. Locator hierarchy I recommend
+For your automation framework, use this priority:
+
+Level 1 — Stable ID
+
+//*[@id='product']
+
+Level 2 — Name / accessible attribute
+
+//*[@name='product']
+
+Level 3 — data-* test attribute
+
+//*[@data-testid='product']
+
+Level 4 — ARIA
+
+//*[@aria-label='Product']
+
+Level 5 — Role + attribute
+
+//span[@role='combobox']
+
+Level 6 — Stable business text
+
+//span[normalize-space()='Product']
+
+Level 7 — Relationship-based XPath
+
+//h3[normalize-space()='Product Details']
+/following::table[1]
+...
+
+Level 8 — CSS classes
+Use when stable.
+
+Level 9 — Generated Angular attributes
+Avoid.
+
+Level 10 — Absolute XPath
+Never use unless there is genuinely no alternative.
+
+29. PrimeNG Calendar / DatePicker
+You may see:
+
+
+<p-datepicker>
+
+The actual input might be:
+
+
+<input
+    type="text"
+    role="combobox">
+
+or similar depending on the PrimeNG version/configuration.
+
+Don't automatically click:
+
+
+//p-datepicker
+
+Inspect:
+
+p-datepicker
+   ↓
+input
+   ↓
+actual user interaction
+
+For a date calendar popup:
+
+Date input
+    ↓
+click
+    ↓
+overlay
+    ↓
+calendar
+    ↓
+month/year
+    ↓
+day
+
+Again, the popup may be rendered separately.
+
+30. PrimeNG buttons
+You might see:
+
+
+<p-button>
+
+But actual DOM may contain:
+
+
+<button type="button">
+    <span class="p-button-icon ..."></span>
+    <span class="p-button-label">Save</span>
+</button>
+
+Prefer:
+
+
+//button[normalize-space()='Save']
+
+or:
+
+
+//button[.//span[normalize-space()='Save']]
+
+rather than:
+
+
+//p-button
+
+31. PrimeNG checkbox
+Could be:
+
+
+<p-checkbox>
+
+but actual interactive structure may involve:
+
+
+<div role="checkbox">
+
+or an input depending on configuration/version.
+
+So inspect the final DOM.
+
+Look for:
+
+role
+aria-checked
+input
+label
+
+For example:
+
+
+//*[@role='checkbox']
+
+or a label relationship.
+
+32. PrimeNG radio button
+Look for:
+
+
+<input type="radio">
+
+or:
+
+
+<div role="radio">
+
+Useful attributes:
+
+role="radio"
+aria-checked
+name
+value
+
+Don't assume the outer <p-radioButton> is the Selenium target.
+
+33. PrimeNG AutoComplete
+This is another important one for ERP applications.
+
+Conceptually:
+
+Input
+ ↓
+type "Coffee"
+ ↓
+Angular event
+ ↓
+API/search
+ ↓
+overlay
+ ↓
+listbox
+ ↓
+option
+
+You need to synchronize after typing.
+
+Example strategy:
+
+
+input.sendKeys("Coffee");
+
+wait.until(ExpectedConditions.visibilityOfElementLocated(
+    By.xpath("//li[@role='option']")
+));
+
+Then locate the desired option by business text.
+
+34. PrimeNG Dialog
+You might have:
+
+
+<p-dialog>
+
+Actual DOM:
+
+
+<div role="dialog">
+    ...
+</div>
+
+Prefer:
+
+
+//*[@role='dialog']
+
+Then scope everything inside it.
+
+For example:
+
+
+//*[@role='dialog']//input[@placeholder='Product']
+
+This is much safer than:
+
+
+//input[@placeholder='Product']
+
+because there might be another Product field elsewhere on the page.
+
+35. Scoping is one of your biggest skills to develop
+Instead of:
+
+
+//input[@placeholder='Search']
+
+use:
+
+
+//div[@role='dialog']//input[@placeholder='Search']
+
+Instead of:
+
+
+//button[normalize-space()='Save']
+
+use:
+
+
+//div[@role='dialog']//button[normalize-space()='Save']
+
+Instead of:
+
+
+//span[@role='combobox']
+
+use:
+
+
+//h3[normalize-space()='Product Details']
+/following::table[1]
+...
+//span[@role='combobox']
+
+Think:
+Page
+ ↓
+Section
+ ↓
+Table
+ ↓
+Row
+ ↓
+Column
+ ↓
+Component
+ ↓
+Interactive element
+
+This is the foundation of robust XPath.
+
+36. Tables + PrimeNG = think in coordinates
+For your project:
+
+Table
+ ├── Header
+ │    ├── Product
+ │    ├── Packing
+ │    ├── UOM
+ │    └── Target Type
+ │
+ └── Body
+      └── Row
+           ├── Product dropdown
+           ├── Packing dropdown
+           ├── UOM dropdown
+           └── Target Type dropdown
+
+The header tells you where the column is.
+
+The body gives you the control.
+
+Therefore:
+
+Column name
+     ↓
+Find TH
+     ↓
+Count preceding TH
+     ↓
+Get same TD
+     ↓
+Find interactive PrimeNG element
+
+This is a very professional automation approach.
+
+37. Horizontal scrolling
+Your application has wide tables.
+
+For example:
+
+| Product | Packing | UOM | Quantity | Price | Target Type | Commission Agent |
+                                                    ↑
+                                                off-screen
+
+The element can exist:
+
+DOM = YES
+
+but be outside the visible horizontal area:
+
+Visible viewport = NO
+
+Therefore Selenium may throw:
+
+ElementNotInteractableException
+
+or timeout waiting for:
+
+
+elementToBeClickable()
+
+Use:
+
+
+((JavascriptExecutor) driver).executeScript(
+    "arguments[0].scrollIntoView({" +
+    "block:'center'," +
+    "inline:'center'" +
+    "});",
+    element
+);
+
+Then wait again.
+
+38. Understand the difference between these waits
+This is essential.
+
+Presence
+
+presenceOfElementLocated()
+
+Means:
+
+
+
+Element exists in DOM.
+It does not mean visible.
+
+Visibility
+
+visibilityOfElementLocated()
+
+Means:
+
+
+
+Element exists and is visible.
+Clickable
+
+elementToBeClickable()
+
+Means effectively:
+
+
+
+Element is visible and enabled enough to click.
+If your element is outside a scrollable viewport, clickable waiting may continue failing.
+
+39. Don't use Thread.sleep()
+Avoid:
+
+
+Thread.sleep(3000);
+
+Prefer:
+
+
+wait.until(ExpectedConditions.visibilityOfElementLocated(locator));
+
+or:
+
+
+wait.until(ExpectedConditions.elementToBeClickable(locator));
+
+or application-specific conditions such as:
+
+
+wait.until(ExpectedConditions.attributeToBe(
+    dropdown,
+    "aria-expanded",
+    "true"
+));
+
+40. Your current explicitWaitVisibility
+Use:
+
+
+public WebElement explicitWaitVisibility(
+        WebDriver driver,
+        By locator) {
+
+    WebDriverWait wait =
+        new WebDriverWait(driver, Duration.ofSeconds(40));
+
+    return wait.until(
+        ExpectedConditions.visibilityOfElementLocated(locator)
+    );
+}
+
+And for WebElement:
+
+
+public WebElement explicitWaitVisibility(
+        WebDriver driver,
+        WebElement element) {
+
+    WebDriverWait wait =
+        new WebDriverWait(driver, Duration.ofSeconds(40));
+
+    return wait.until(
+        ExpectedConditions.visibilityOf(element)
+    );
+}
+
+Do not do:
+
+
+(By) element
+
+41. Your Selenium debugging workflow
+Whenever a locator fails, don't immediately modify XPath randomly.
+
+Use this process:
+
+1. Identify business element
+        ↓
+2. Inspect DOM
+        ↓
+3. Identify component
+        ↓
+4. Identify actual interactive element
+        ↓
+5. Find stable attributes
+        ↓
+6. Build locator
+        ↓
+7. Test XPath in DevTools
+        ↓
+8. Check count
+        ↓
+9. Check visibility
+        ↓
+10. Check enabled state
+        ↓
+11. Check viewport/scroll
+        ↓
+12. Check overlay
+        ↓
+13. Add explicit wait
+        ↓
+14. Automate
+
+42. DevTools XPath workflow
+Press:
+
+F12
+
+Then:
+
+Ctrl + F
+
+Paste:
+
+
+//h3[normalize-space()='Product Details']
+
+You want:
+
+1 of 1
+
+Then progressively narrow:
+
+
+//h3[normalize-space()='Product Details']/following::table[1]
+
+Then:
+
+
+//h3[normalize-space()='Product Details']
+/following::table[1]
+//thead//th[.//span[normalize-space()='Product']]
+
+Then:
+
+
+//h3[normalize-space()='Product Details']
+/following::table[1]
+//tbody/tr[1]/td[...]
+
+Then:
+
+
+...//span[@role='combobox']
+
+Never build a 200-character XPath in one shot.
+
+Build it step-by-step.
+
+43. The 1 of 1 rule
+You asked about this today.
+
+If DevTools says:
+
+1 of 1
+
+that's good for uniqueness.
+
+But it does not prove:
+
+visible
+enabled
+clickable
+in viewport
+correct state
+
+You need to distinguish:
+
+Locator correctness
+        ≠
+Element interactability
+
+This distinction will save you a lot of debugging time.
+
+44. When locator is 1 of 1 but Selenium times out
+Use this checklist:
+
+1 of 1?
+    ↓
+YES
+    ↓
+Is displayed?
+    ↓
+NO → hidden element
+YES
+    ↓
+Is enabled?
+    ↓
+NO → disabled
+YES
+    ↓
+Is in viewport?
+    ↓
+NO → scroll
+YES
+    ↓
+Overlay covering it?
+    ↓
+YES → handle overlay
+NO
+    ↓
+Animation?
+    ↓
+YES → wait for stable state
+NO
+    ↓
+Wrong interactive child?
+    ↓
+Inspect DOM deeper
+
+45. Angular animation
+You might click:
+
+Save
+
+and Angular starts:
+
+spinner
+dialog animation
+table refresh
+
+The DOM can temporarily contain the element but it isn't ready.
+
+So:
+
+
+presenceOfElementLocated()
+
+may pass while:
+
+
+elementToBeClickable()
+
+fails.
+
+This is normal in dynamic applications.
+
+46. Angular API calls
+ERP applications often work like:
+
+Click Product
+      ↓
+Dropdown opens
+      ↓
+Select Product
+      ↓
+Angular event
+      ↓
+HTTP/API call
+      ↓
+Server response
+      ↓
+Angular updates model
+      ↓
+DOM updates
+
+Therefore, after an action, the next element may not immediately be ready.
+
+You should learn to synchronize on UI state, not arbitrary time.
+
+Examples:
+
+
+wait.until(ExpectedConditions.invisibilityOfElementLocated(spinner));
+
+or:
+
+
+wait.until(ExpectedConditions.visibilityOfElementLocated(result));
+
+or:
+
+
+wait.until(ExpectedConditions.attributeToBe(
+    dropdown,
+    "aria-expanded",
+    "true"
+));
+
+47. Loading spinner detection
+Look for:
+
+p-progressSpinner
+p-progressbar
+spinner
+loading
+aria-busy
+
+Potential locator:
+
+
+//*[contains(@class,'spinner')]
+
+But first inspect your application's actual DOM.
+
+Then:
+
+
+wait.until(
+    ExpectedConditions.invisibilityOfElementLocated(spinner)
+);
+
+This is often useful after Save/Search/API operations.
+
+48. Angular component hierarchy
+Think of your application like:
+
+AppComponent
+│
+├── HeaderComponent
+│
+├── SidebarComponent
+│
+└── ContractComponent
+      │
+      ├── GeneralComponent
+      │
+      ├── ProductDetailsComponent
+      │       │
+      │       └── PrimeNG Table
+      │
+      └── CommissionDetailsComponent
+              │
+              └── PrimeNG Table
+
+When creating XPath, you're essentially creating a DOM path through this component hierarchy.
+
+You don't need to know the actual TypeScript classes to benefit from this mental model.
+
+49. Shadow DOM vs Angular
+Don't confuse these.
+
+Angular:
+
+Angular component
+
+does not automatically mean Shadow DOM.
+
+Most normal Angular applications expose their rendered DOM to Selenium normally.
+
+You should only worry about Shadow DOM if DevTools actually shows:
+
+#shadow-root
+
+Then Selenium requires shadow-root handling.
+
+50. ng-container
+Angular can use:
+
+
+<ng-container>
+
+But it does not necessarily create a real DOM element. Angular documentation explicitly notes that ng-container groups content without rendering an actual element. 
+
+So don't build a locator expecting:
+
+
+//ng-container
+
+to exist in the browser DOM.
+
+51. ng-template
+Similarly:
+
+
+<ng-template>
+
+is a template fragment and isn't necessarily rendered until Angular instantiates it. 
+
+Therefore:
+
+
+//ng-template
+
+is generally not what you want to automate.
+
+Find the rendered result.
+
+52. PrimeNG overlay debugging
+When a dropdown doesn't work:
+
+Step 1
+Click manually.
+
+Step 2
+Inspect the option.
+
+Step 3
+Find:
+
+
+role="listbox"
+
+Step 4
+Find:
+
+
+role="option"
+
+Step 5
+Check whether the listbox is:
+
+inside table
+
+or:
+
+outside table
+
+Step 6
+Check visibility.
+
+This will explain many PrimeNG Selenium problems.
+
+53. Option locator best practice
+Instead of:
+
+
+//li[@aria-label='AC A ']
+
+use:
+
+
+//li[@role='option'
+and normalize-space(@aria-label)='AC A']
+
+This handles whitespace.
+
+You can also use visible filtering in Java:
+
+
+By option = By.xpath(
+    "//li[@role='option' and " +
+    "normalize-space(@aria-label)='" +
+    value.trim() +
+    "']"
+);
+
+WebElement visibleOption = wait.until(driver ->
+    driver.findElements(option)
+        .stream()
+        .filter(WebElement::isDisplayed)
+        .findFirst()
+        .orElse(null)
+);
+
+visibleOption.click();
+
+54. Don't overuse contains()
+This:
+
+
+//span[contains(text(),'Product')]
+
+could match:
+
+Product
+Product Details
+Product Code
+Product Description
+
+Prefer:
+
+
+//span[normalize-space()='Product']
+
+when you mean exactly Product.
+
+Use contains() only when partial matching is actually intended.
+
+55. Avoid absolute XPath
+Never prefer:
+
+
+/html/body/div[1]/div[2]/div[3]/table/tbody/tr[1]/td[5]
+
+This is extremely fragile.
+
+Instead:
+
+
+//h3[normalize-space()='Product Details']
+/following::table[1]
+
+Then narrow from there.
+
+56. Avoid excessive indexes
+This:
+
+
+//div[3]/div[2]/span[1]
+
+is fragile.
+
+But an index can be perfectly legitimate when it has semantic meaning:
+
+
+//h3[normalize-space()='Product Details']
+/following::table[1]
+
+Here:
+
+
+following::table[1]
+
+means:
+
+
+
+First table belonging to this section.
+That's a meaningful index.
+
+57. Your locator design philosophy
+For your automation project, think:
+
+BAD
+Find coordinates
+Find div
+Find span
+Click
+
+GOOD
+Find business section
+      ↓
+Find business table
+      ↓
+Find business column
+      ↓
+Find actual component
+      ↓
+Find interactive child
+      ↓
+Wait
+      ↓
+Interact
+
+58. A professional generic architecture
+Your Page Object should ideally have:
+
+
+public By getTableDropdown(
+        String tableName,
+        String columnName) {
+    
+    return By.xpath(
+        ...
+    );
+}
+
+Then:
+
+
+public void selectTableDropdownValue(
+        String tableName,
+        String columnName,
+        String value) {
+
+    By dropdown =
+        getTableDropdown(tableName, columnName);
+
+    WebElement element =
+        webDriverCommonLibrary
+            .explicitWaitVisibility(driver, dropdown);
+
+    scrollToElement(element);
+
+    wait.until(
+        ExpectedConditions.elementToBeClickable(element)
+    ).click();
+
+    selectPrimeNGOption(value);
+}
+
+This is much more maintainable than writing individual methods for every dropdown.
+
+59. What you should learn about PrimeNG
+For your ERP project, prioritize:
+
+⭐⭐⭐⭐⭐
+Select / Dropdown
+Table
+Input
+Button
+Dialog
+Calendar / DatePicker
+AutoComplete
+MultiSelect
+Checkbox
+RadioButton
+Toast
+ConfirmDialog
+
+⭐⭐⭐⭐
+Overlay
+Pagination
+Sorting
+Filtering
+Tabs
+Accordion
+Tooltip
+Menu
+
+⭐⭐⭐
+Tree
+TreeTable
+FileUpload
+Carousel
+Progress components
+
+You don't need to master every PrimeNG component immediately.
+
+60. PrimeNG Table concepts you should understand
+Learn:
+
+thead
+tbody
+tr
+th
+td
+row
+column
+pagination
+sorting
+filtering
+frozen columns
+scrollable table
+virtual scrolling
+
+Especially:
+
+Frozen columns
+A table may have:
+
+Frozen left
+-------------------------------
+| Product | ... | Target |
+-------------------------------
+
+The DOM can sometimes contain separate table structures for frozen and scrollable content.
+
+This can produce seemingly duplicate headers/cells.
+
+If you see:
+
+1 of 2
+
+don't immediately assume XPath is wrong.
+
+Inspect whether PrimeNG has created:
+
+frozen table
+scrollable table
+
+61. PrimeNG virtual scrolling
+If enabled, the application may not render every row.
+
+You might have 1,000 records but only 20 rows in DOM.
+
+Therefore:
+
+
+//tbody/tr[100]
+
+may not exist.
+
+You must scroll or use the component's filtering/search capability.
+
+62. Pagination
+If the UI shows:
+
+1 2 3 4 5 Next
+
+your target may not exist on the current page.
+
+Selenium isn't necessarily failing because of a bad locator.
+
+The record might simply not be rendered.
+
+63. Filtering
+PrimeNG tables may have filters.
+
+Think:
+
+Enter filter
+ ↓
+Angular event
+ ↓
+data filtering
+ ↓
+table rerender
+
+So wait for the result after filtering.
+
+64. The most important DevTools skills
+Become very comfortable with:
+
+F12
+Elements
+Ctrl + F
+Inspect
+Copy XPath
+Copy CSS selector
+Console
+$x()
+$()
+Computed
+Styles
+Event Listeners
+Accessibility
+
+But don't blindly trust:
+
+Copy XPath
+
+Chrome-generated XPath is usually not the best production locator.
+
+Use it only as a starting point.
+
+65. Console commands you should memorize
+XPath count
+
+$x("//span[@role='combobox']").length
+
+Find element
+
+$x("//span[@role='combobox']")[0]
+
+Check visibility
+
+$x("//span[@role='combobox']")[0].offsetParent !== null
+
+Bounding rectangle
+
+$x("//span[@role='combobox']")[0].getBoundingClientRect()
+
+Scroll
+
+$x("//span[@role='combobox']")[0]
+    .scrollIntoView({block:'center', inline:'center'})
+
+These are extremely useful when debugging Selenium.
+
+66. Your locator debugging template
+Whenever something fails, record:
+
+Element:
+Commission Agent / Broker dropdown
+
+Section:
+Commission Details
+
+Component:
+PrimeNG dropdown
+
+Actual interactive element:
+span[role='combobox']
+
+XPath:
+...
+
+XPath count:
+1 of 1
+
+Displayed:
+true/false
+
+Enabled:
+true/false
+
+Expanded:
+true/false
+
+In viewport:
+true/false
+
+Overlay:
+yes/no
+
+Scroll required:
+yes/no
+
+Wait used:
+visibility / clickable / custom
+
+Failure:
+Timeout / ElementNotInteractable / StaleElement
+
+This is how a professional automation engineer approaches UI failures.
+
+67. Exception → likely cause
+ExceptionCommon causeNoSuchElementExceptionWrong locator / element not renderedTimeoutExceptionCondition never became trueElementNotInteractableExceptionHidden/not interactableElementClickInterceptedExceptionAnother element/overlay covers itStaleElementReferenceExceptionAngular rerendered the DOMInvalidSelectorExceptionInvalid XPath/CSSJavascriptExceptionJS execution problemNoSuchWindowExceptionWindow/tab changedUnexpectedTagNameExceptionWrong Selenium API for element type
+
+68. StaleElementReferenceException in Angular
+This is especially important.
+
+You find:
+
+
+WebElement element = driver.findElement(locator);
+
+Then Angular updates the table.
+
+The original DOM element is destroyed and recreated.
+
+Your Java object points to the old element.
+
+Then:
+
+
+element.click();
+
+can produce:
+
+StaleElementReferenceException
+
+Solution
+Prefer keeping the By locator and finding the element again:
+
+
+wait.until(
+    ExpectedConditions.elementToBeClickable(locator)
+).click();
+
+rather than holding WebElement objects for too long.
+
+69. Angular rerendering means: prefer By
+This is one reason I recommend your framework methods accept:
+
+
+By
+
+rather than:
+
+
+WebElement
+
+Prefer:
+
+
+explicitWaitVisibility(driver, locator)
+
+over keeping:
+
+
+WebElement element
+
+through multiple Angular operations.
+
+70. Your reusable wait library
+I would build something like:
+
+
+public WebElement waitForPresence(By locator)
+
+public WebElement waitForVisibility(By locator)
+
+public WebElement waitForClickable(By locator)
+
+public boolean waitForInvisibility(By locator)
+
+public void clickWhenReady(By locator)
+
+public void scrollToElement(By locator)
+
+public void selectPrimeNGOption(String value)
+
+public void waitForSpinnerToDisappear(By spinner)
+
+public void waitForAttribute(By locator, String attribute, String value)
+
+This will become your automation foundation.
+
+71. PrimeNG reusable dropdown method
+Eventually you want something like:
+
+
+public void selectPrimeNGDropdown(
+        By dropdown,
+        String option) {
+
+    WebElement element =
+        waitForVisibility(dropdown);
+
+    scrollToElement(dropdown);
+
+    waitForClickable(dropdown).click();
+
+    By optionLocator = By.xpath(
+        "//li[@role='option' and " +
+        "normalize-space(@aria-label)='" +
+        option.trim() + "']"
+    );
+
+    WebElement visibleOption = wait.until(driver ->
+        driver.findElements(optionLocator)
+            .stream()
+            .filter(WebElement::isDisplayed)
+            .findFirst()
+            .orElse(null)
+    );
+
+    visibleOption.click();
+}
+
+Then your page code becomes:
+
+
+selectPrimeNGDropdown(
+    getTableDropdown("Commission Details",
+                     "Commission Agent / Broker"),
+    "Agent"
+);
+
+That's the direction I'd take your framework.
+
+72. One more important concept: accessible name
+Modern web applications often expose:
+
+
+aria-label="Product"
+
+or:
+
+
+aria-labelledby="productLabel"
+
+These are accessibility attributes.
+
+For automation, they can be extremely useful.
+
+For example:
+
+
+//*[@aria-label='Product']
+
+is often more meaningful than:
+
+
+//div[4]/span[1]
+
+73. Learn HTML alongside Angular
+You should become very strong in:
+
+div
+span
+input
+button
+label
+table
+thead
+tbody
+tr
+th
+td
+ul
+li
+form
+section
+article
+
+And attributes:
+
+id
+class
+name
+value
+type
+role
+aria-label
+aria-expanded
+aria-selected
+aria-haspopup
+placeholder
+disabled
+readonly
+data-*
+
+Angular knowledge becomes much easier once your HTML knowledge is strong.
+
+74. Your 30-day learning roadmap
+Week 1 — HTML + XPath
+Master:
+
+HTML DOM
+Elements
+Attributes
+Parent/child
+Sibling
+XPath
+CSS
+normalize-space
+contains
+starts-with
+ancestor
+descendant
+following
+following-sibling
+preceding-sibling
+
+Practice every day.
+
+Week 2 — Angular for testers
+Learn:
+
+Components
+Templates
+Data binding
+Property binding
+Event binding
+@if / *ngIf
+@for / *ngFor
+Directives
+Forms
+ngModel
+formControlName
+Dynamic rendering
+Angular lifecycle basics
+
+The official Angular Essentials documentation is a good structured starting point. 
+
+Week 3 — PrimeNG
+Master:
+
+Dropdown / Select
+Table
+Calendar
+Dialog
+Input
+Button
+Checkbox
+Radio
+AutoComplete
+MultiSelect
+Toast
+ConfirmDialog
+Overlay
+Pagination
+Filtering
+Sorting
+
+Use the official PrimeNG component documentation while practicing. 
+
+Week 4 — Selenium + Angular debugging
+Master:
+
+Explicit waits
+Fluent waits
+Dynamic DOM
+Stale elements
+Overlays
+Scrolling
+Angular rerender
+PrimeNG overlays
+API/loading synchronization
+Reusable locator methods
+Page Object Model
+
+75. The most important concepts for YOUR current project
+If you don't have time to learn everything, learn these 15 first:
+
+1. Angular components
+2. Angular templates
+3. Dynamic DOM
+4. @if / *ngIf
+5. @for / *ngFor
+6. Angular forms
+7. PrimeNG component structure
+8. PrimeNG overlays
+9. role / aria attributes
+10. table header → column → cell relationships
+11. XPath axes
+12. normalize-space()
+13. Selenium explicit waits
+14. Angular rerender / stale elements
+15. scrolling + visibility + clickability
+
+Once these are strong, your current errors like:
+
+TimeoutException
+ElementNotInteractableException
+ElementClickInterceptedException
+StaleElementReferenceException
+
+will become much easier to diagnose.
+
+76. Your ultimate locator formula
+For your ERP application, memorize this:
+
+BUSINESS SECTION
+      ↓
+TABLE
+      ↓
+HEADER
+      ↓
+COLUMN POSITION
+      ↓
+ROW
+      ↓
+TD
+      ↓
+PRIME NG COMPONENT
+      ↓
+ACTUAL INTERACTIVE ELEMENT
+      ↓
+STABLE ATTRIBUTE
+      ↓
+WAIT
+      ↓
+SCROLL
+      ↓
+CLICK
+      ↓
+OVERLAY
+      ↓
+OPTION
+
+For example:
+
+Commission Details
+       ↓
+table
+       ↓
+Commission Agent / Broker
+       ↓
+column index
+       ↓
+row 1
+       ↓
+td
+       ↓
+xbs-dcloud-dropdown-group
+       ↓
+PrimeNG dropdown
+       ↓
+span[role='combobox']
+       ↓
+click
+       ↓
+PrimeNG overlay
+       ↓
+li[role='option']
+       ↓
+normalize-space(@aria-label)='Agent'
+
+That is the mental model I want you to develop.
+
+You don't need to memorize hundreds of XPath expressions. You need to understand how Angular renders components and how PrimeNG turns those components into actual browser DOM, then derive a stable locator from that DOM. Angular's own documentation emphasizes that components combine their class and template and that rendered DOM is produced from that relationship. 
+
+Best resources to keep bookmarked
+Angular official documentation — Learn components, templates, directives and dynamic rendering. 
+Angular Templates — Particularly useful for understanding why your DOM changes dynamically. 
+PrimeNG official documentation — Use this when identifying how a particular PrimeNG component behaves. 
+If you can provide one screenshot/HTML inspection of your actual Product Details + Commission Details DOM, I can turn this into a project-specific Angular + PrimeNG Selenium locator handbook for your ERP application, including dropdown, table, calendar, buttons, dialogs, autocomplete, overlays, waits, and reusable Java methods.
+
+Upload a photo
+
+
+
+cc9bb543-09dc-41b5-ac4a-ee22f9f96fb7.png
+
+940992c3-50a4-426c-aebe-ebe678d2e2bc.png
+
+79bea134-d84f-442b-9aef-d051db822392.png
+
+Yes — these screenshots are very useful. They show the actual Angular + PrimeNG DOM structure of your application, and we can now build locators based on how your application is really implemented rather than guessing.
+
+I can see three important patterns:
+
+Your application uses custom Angular components such as xbs-dcloud-dropdown.
+Inside that component, it uses PrimeNG p-dropdown.
+The actual interactive element is the PrimeNG span[@role='combobox'], while the dropdown options are handled through a separate overlay.
+1. First understand your actual DOM
+From your screenshot, the structure is approximately:
+
+xbs-dcloud-dropdown
+    │
+    └── p-floatLabel
+          │
+          └── p-inputwrapper
+                │
+                └── p-dropdown
+                      │
+                      ├── span[@role='combobox']
+                      │
+                      ├── div[@role='button']
+                      │
+                      └── p-overlay
+
+More specifically:
+
+
+<xbs-dcloud-dropdown>
+    <p-floatLabel>
+
+        <p-dropdown>
+
+            <div id="pn_id_532"
+                 class="p-dropdown ...">
+
+                <span
+                    role="combobox"
+                    aria-label="Class"
+                    aria-haspopup="listbox"
+                    aria-expanded="false">
+                </span>
+
+                ...
+
+                <div
+                    role="button"
+                    aria-label="dropdown trigger"
+                    aria-haspopup="listbox"
+                    aria-expanded="false">
+                </div>
+
+                <p-overlay>
+                    ...
+                </p-overlay>
+
+            </div>
+
+        </p-dropdown>
+
+        <label>
+            ...
+        </label>
+
+    </p-floatLabel>
+</xbs-dcloud-dropdown>
+
+This tells us something very important.
+
+There are THREE different things
+1. Angular custom component
+   xbs-dcloud-dropdown
+
+2. PrimeNG component
+   p-dropdown
+
+3. Actual interactive DOM element
+   span[role='combobox']
+
+For Selenium, #3 is generally your target.
+
+2. Your span[@role='combobox'] is excellent
+Your screenshot shows:
+
+
+<span
+    role="combobox"
+    aria-label="Class"
+    aria-haspopup="listbox"
+    aria-expanded="false"
+    tabindex="0">
+</span>
+
+This is much better than using:
+
+
+//div[@id='pn_id_532']
+
+because:
+
+pn_id_532
+
+is very likely generated dynamically.
+
+Don't build your automation around it.
+
+Good
+
+//span[@role='combobox' and @aria-label='Class']
+
+Even better:
+
+
+//span[@role='combobox'
+      and normalize-space(@aria-label)='Class']
+
+3. Why role="combobox" matters
+The following:
+
+
+role="combobox"
+
+is an accessibility semantic that tells us:
+
+
+
+This element behaves as a selectable input/combobox.
+And:
+
+
+aria-haspopup="listbox"
+
+tells us:
+
+
+
+Opening this control will present a listbox.
+And:
+
+
+aria-expanded="false"
+
+means:
+
+
+
+The list is currently closed.
+After clicking:
+
+
+aria-expanded="true"
+
+means:
+
+
+
+The list is open.
+This gives you excellent synchronization opportunities.
+
+4. Your Class dropdown locator
+Based on the screenshot:
+
+
+//span[@role='combobox' and normalize-space(@aria-label)='Class']
+
+Test it in Chrome:
+
+Ctrl + F
+
+and paste:
+
+
+//span[@role='combobox' and normalize-space(@aria-label)='Class']
+
+If Chrome says:
+
+1 of 1
+
+you have a very good locator.
+
+5. But there is an even better approach for your framework
+Suppose your page contains:
+
+Class
+Product
+Packing
+UOM
+Target Type
+Commission Agent / Broker
+
+If you simply use:
+
+
+//span[@role='combobox']
+
+you may get:
+
+1 of 8
+
+or:
+
+1 of 15
+
+Therefore you need context.
+
+For example:
+
+
+//span[@role='combobox'
+and normalize-space(@aria-label)='Class']
+
+is already quite specific.
+
+6. Your custom component is useful as a parent
+You have:
+
+
+<xbs-dcloud-dropdown>
+
+This is your application's custom Angular component.
+
+You could therefore use:
+
+
+//xbs-dcloud-dropdown//span[
+    @role='combobox'
+    and normalize-space(@aria-label)='Class'
+]
+
+This means:
+
+Find xbs-dcloud-dropdown
+       ↓
+inside it
+       ↓
+find span
+       ↓
+role = combobox
+       ↓
+aria-label = Class
+
+That's a strong locator.
+
+I would prefer this when necessary:
+
+//xbs-dcloud-dropdown//span[
+    @role='combobox'
+    and normalize-space(@aria-label)='Class'
+]
+
+over:
+
+
+//span[@role='combobox' and @aria-label='Class']
+
+if there are multiple comboboxes with the same accessible name elsewhere on the page.
+
+7. Very important: aria-label vs visible label
+Look carefully at your screenshot.
+
+The DOM has:
+
+
+aria-label="Class"
+
+while the actual <label> appears separately:
+
+
+<label
+    for="float-label">
+
+This is common with component libraries.
+
+Therefore don't assume:
+
+
+//label[normalize-space()='Class']
+
+will directly lead to the dropdown.
+
+Instead, you can use:
+
+label
+   ↓
+for
+   ↓
+component/input
+
+or use the component's accessible attributes.
+
+8. p-floatLabel is another important PrimeNG concept
+Your structure contains:
+
+
+<p-floatLabel>
+
+This is a PrimeNG floating-label pattern.
+
+Conceptually:
+
+┌──────────────────────────┐
+│ Class                    │
+│                          │
+│ ▼                        │
+└──────────────────────────┘
+
+The label is not necessarily inside the input.
+
+So this XPath:
+
+
+//label/following-sibling::p-dropdown
+
+may or may not work depending on the actual DOM.
+
+Don't assume visual proximity equals DOM relationship.
+
+9. The p-dropdown wrapper
+You have:
+
+
+<p-dropdown>
+
+and inside:
+
+
+<div class="p-dropdown ...">
+
+Don't automatically click:
+
+
+//p-dropdown
+
+Why?
+
+Because <p-dropdown> is the Angular/PrimeNG component host.
+
+The actual user interaction is deeper:
+
+p-dropdown
+    ↓
+div.p-dropdown
+    ↓
+span[role=combobox]
+
+Therefore:
+
+
+//p-dropdown//span[@role='combobox']
+
+is more meaningful.
+
+10. The dropdown trigger is also interesting
+Your screenshot shows:
+
+
+<div
+    role="button"
+    aria-label="dropdown trigger"
+    aria-haspopup="listbox"
+    aria-expanded="false"
+    class="p-dropdown-trigger">
+</div>
+
+This means PrimeNG gives you another possible click target:
+
+
+//div[
+    @role='button'
+    and @aria-label='dropdown trigger'
+]
+
+But don't use this globally because there could be many dropdown triggers.
+
+Better:
+
+
+//p-dropdown//div[
+    @role='button'
+    and @aria-label='dropdown trigger'
+]
+
+or, even better, scope it to your particular field.
+
+11. Which one should you click?
+You have:
+
+span[role=combobox]
+
+and:
+
+div[role=button][aria-label='dropdown trigger']
+
+Both represent interaction with the dropdown.
+
+For your framework, I'd start with:
+
+
+//p-dropdown//span[@role='combobox']
+
+because it is directly identified as the combobox.
+
+If that doesn't interact reliably in your particular PrimeNG version, use:
+
+
+//p-dropdown//div[
+    @role='button'
+    and @aria-label='dropdown trigger'
+]
+
+The important point is:
+
+Inspect which element your manual user action actually interacts with.
+
+12. Now look at your table
+Your third screenshot gives us another excellent piece of information.
+
+I can see:
+
+
+<div
+    formarrayname="item_details"
+    style="overflow-x: auto;"
+    class="ng-untouched ng-pristine ng-invalid">
+
+Then:
+
+
+<xbs-dcloud-dropdown>
+
+and:
+
+
+<table class="even">
+
+Then:
+
+
+<thead>
+    <tr class="custom-card-header-table">
+
+and headers:
+
+
+<th>
+    ...
+</th>
+
+<th>
+    ...
+</th>
+
+<th>
+    <span>Packing</span>
+    <span class="mandatory">*</span>
+</th>
+
+<th>
+    <span>UOM</span>
+    <span class="mandatory">*</span>
+</th>
+
+This is very valuable for locator construction.
+
+13. formarrayname="item_details" is useful
+You have:
+
+
+formarrayname="item_details"
+
+This is Angular reactive-form information.
+
+It can provide a strong anchor:
+
+
+//div[@formarrayname='item_details']
+
+Then:
+
+
+//div[@formarrayname='item_details']//table
+
+This is much better than:
+
+
+//table[3]
+
+because you're identifying the table by its application context.
+
+14. Your table locator
+I would test:
+
+
+//div[@formarrayname='item_details']//table
+
+Expected:
+
+1 of 1
+
+If it gives 1 of 1, that's a very good table anchor.
+
+Then:
+
+
+//div[@formarrayname='item_details']//table//thead//th
+
+gets the headers.
+
+15. Find Packing
+Your screenshot shows:
+
+
+<th>
+    <span>Packing</span>
+    <span class="mandatory">*</span>
+</th>
+
+Use:
+
+
+//div[@formarrayname='item_details']//table//thead//th[
+    .//span[normalize-space()='Packing']
+]
+
+This is excellent.
+
+Notice the .:
+
+
+.//span
+
+It means:
+
+
+
+Search for the span inside THIS th.
+This prevents accidentally finding a Packing span elsewhere on the page.
+
+16. Find UOM
+Same pattern:
+
+
+//div[@formarrayname='item_details']//table//thead//th[
+    .//span[normalize-space()='UOM']
+]
+
+Again:
+
+1 of 1
+
+would be ideal.
+
+17. Your table architecture
+You now have a very clear structure:
+
+div[formarrayname='item_details']
+             │
+             ▼
+          table
+             │
+       ┌─────┴─────┐
+       ▼           ▼
+     thead       tbody
+       │           │
+       ▼           ▼
+      th          td
+       │           │
+   Packing      dropdown
+     UOM        dropdown
+   Product      dropdown
+
+This is exactly the kind of structure we want to exploit.
+
+18. Generic table-column locator
+You can make your locator completely generic.
+
+For example:
+
+
+private By getItemDetailsDropdown(String columnName) {
+
+    return By.xpath(
+        "//div[@formarrayname='item_details']" +
+        "//table//tbody/tr[1]/td[" +
+        "count(" +
+        "//div[@formarrayname='item_details']" +
+        "//table//thead//th[" +
+        ".//span[normalize-space()='" + columnName + "']" +
+        "]/preceding-sibling::th" +
+        ") + 1" +
+        "]//span[@role='combobox']"
+    );
+}
+
+Then:
+
+
+getItemDetailsDropdown("Product");
+
+
+getItemDetailsDropdown("Packing");
+
+
+getItemDetailsDropdown("UOM");
+
+This is the direction I recommend for your framework.
+
+19. But there's one issue we must account for
+Look at this:
+
+
+<div formarrayname="item_details"
+     style="overflow-x: auto;">
+
+This tells us:
+
+🚨 Your table is horizontally scrollable.
+This directly connects to the timeout problem you showed earlier.
+
+You may have:
+
+Product | Packing | UOM | Quantity | Price | Target Type | Commission Agent
+
+but the browser viewport may initially show:
+
+Product | Packing | UOM | Quantity
+
+while:
+
+Target Type
+Commission Agent
+
+are outside the visible horizontal area.
+
+The element can be:
+
+DOM → YES
+XPath → 1 of 1
+Displayed → potentially YES
+Viewport → NO
+
+Therefore:
+
+
+elementToBeClickable()
+
+can still have problems.
+
+20. This screenshot explains your previous timeout
+You previously had:
+
+TimeoutException
+waiting for element to be clickable,
+but the element was not visible
+
+Now we can see:
+
+
+style="overflow-x: auto;"
+
+That is a major clue.
+
+Your DOM hierarchy is essentially:
+
+item_details
+     │
+     └── overflow-x:auto
+             │
+             └── table
+                   │
+                   └── Target Type / Commission Agent
+
+So don't just scroll the browser window.
+
+You need to make sure the scrollable table container exposes the target.
+
+21. Your Java scroll method
+I'd use this first:
+
+
+public void scrollToElement(WebElement element) {
+
+    ((JavascriptExecutor) driver).executeScript(
+        "arguments[0].scrollIntoView({" +
+        "behavior:'instant'," +
+        "block:'center'," +
+        "inline:'center'" +
+        "});",
+        element
+    );
+}
+
+Then:
+
+
+WebElement element =
+    wait.until(ExpectedConditions.presenceOfElementLocated(locator));
+
+scrollToElement(element);
+
+wait.until(
+    ExpectedConditions.visibilityOf(element)
+);
+
+wait.until(
+    ExpectedConditions.elementToBeClickable(element)
+).click();
+
+22. Even better for your particular DOM
+Because we now know:
+
+
+overflow-x: auto;
+
+you can specifically scroll the nearest horizontal container.
+
+For example:
+
+
+public void scrollHorizontallyToElement(WebElement element) {
+
+    ((JavascriptExecutor) driver).executeScript(
+        "let element = arguments[0];" +
+        "let parent = element.parentElement;" +
+
+        "while (parent) {" +
+
+        "if (parent.scrollWidth > parent.clientWidth) {" +
+        "parent.scrollLeft = " +
+        "(element.offsetLeft - parent.clientWidth / 2);" +
+        "break;" +
+        "}" +
+
+        "parent = parent.parentElement;" +
+        "}",
+        element
+    );
+}
+
+This is particularly relevant because your screenshot explicitly shows a horizontally scrollable container.
+
+23. Don't use this
+Avoid:
+
+
+((JavascriptExecutor) driver).executeScript(
+    "window.scrollTo(1000,0)"
+);
+
+Why?
+
+Because:
+
+window
+
+may not be the element that is scrolling.
+
+Your application has:
+
+
+overflow-x:auto
+
+on an inner container.
+
+Therefore:
+
+Window scroll
+     ≠
+Table scroll
+
+This is a very important Selenium + Angular application concept.
+
+24. Now your PrimeNG dropdown wait should look like this
+I recommend your common library eventually have:
+
+
+public WebElement explicitWaitVisibility(
+        WebDriver driver,
+        By locator) {
+
+    WebDriverWait wait =
+        new WebDriverWait(driver, Duration.ofSeconds(40));
+
+    return wait.until(
+        ExpectedConditions.visibilityOfElementLocated(locator)
+    );
+}
+
+Then:
+
+
+public WebElement explicitWaitClickable(
+        WebDriver driver,
+        By locator) {
+
+    WebDriverWait wait =
+        new WebDriverWait(driver, Duration.ofSeconds(40));
+
+    return wait.until(
+        ExpectedConditions.elementToBeClickable(locator)
+    );
+}
+
+25. Recommended dropdown method
+For your actual application, I'd structure it like:
+
+
+public void selectTableDropdownValue(
+        String columnName,
+        String value) {
+
+    By dropdownLocator =
+        getItemDetailsDropdown(columnName);
+
+    WebElement dropdown =
+        webDriverCommonLibrary
+            .explicitWaitVisibility(driver, dropdownLocator);
+
+    scrollToElement(dropdown);
+
+    dropdown =
+        webDriverCommonLibrary
+            .explicitWaitVisibility(driver, dropdownLocator);
+
+    webDriverCommonLibrary
+        .explicitWaitClickable(driver, dropdownLocator)
+        .click();
+
+    By optionLocator = By.xpath(
+        "//li[@role='option' and " +
+        "normalize-space(@aria-label)='" +
+        value.trim() +
+        "']"
+    );
+
+    WebElement option = wait.until(driver ->
+        driver.findElements(optionLocator)
+            .stream()
+            .filter(WebElement::isDisplayed)
+            .findFirst()
+            .orElse(null)
+    );
+
+    option.click();
+}
+
+Notice something important:
+
+We keep the By
+instead of holding a WebElement for a long time.
+
+That's useful because Angular/PrimeNG can rerender the component.
+
+26. Why keeping By is better in Angular
+Suppose:
+
+
+WebElement dropdown = driver.findElement(locator);
+
+Then Angular updates the table.
+
+The original element can be destroyed.
+
+You now have:
+
+Java WebElement
+       ↓
+OLD DOM ELEMENT ❌
+
+while the browser has:
+
+NEW DOM ELEMENT ✅
+
+This causes:
+
+StaleElementReferenceException
+
+If you keep:
+
+
+By locator
+
+Selenium can find the latest element again.
+
+Therefore:
+
+
+wait.until(
+    ExpectedConditions.elementToBeClickable(locator)
+).click();
+
+is often safer.
+
+27. Your p-overlay is extremely important
+Your screenshot shows:
+
+
+<p-overlay
+    class="p-element ...">
+</p-overlay>
+
+This is another major PrimeNG clue.
+
+When the dropdown opens, the option list is likely rendered through this overlay.
+
+Therefore your option XPath should not necessarily start from the table.
+
+Don't do:
+
+
+//table//td//li[@role='option']
+
+Instead:
+
+
+//li[@role='option'
+    and normalize-space(@aria-label)='Agent']
+
+because the overlay can be elsewhere in the DOM.
+
+28. Your complete mental picture
+For your actual application, think:
+
+ANGULAR
+│
+├── Custom component
+│     xbs-dcloud-dropdown
+│
+└── PRIME NG
+      │
+      └── p-dropdown
+            │
+            ├── span[role=combobox]
+            │       ↑
+            │       Selenium interaction
+            │
+            ├── div[role=button]
+            │
+            └── p-overlay
+                    │
+                    └── listbox
+                          │
+                          ├── option
+                          ├── option
+                          └── option
+
+And your table:
+
+Angular FormArray
+│
+└── div[formarrayname='item_details']
+       │
+       └── overflow-x:auto
+              │
+              └── table
+                   │
+                   ├── thead
+                   │    ├── Product
+                   │    ├── Packing
+                   │    ├── UOM
+                   │    └── ...
+                   │
+                   └── tbody
+                        │
+                        └── tr
+                             └── td
+                                  └── xbs-dcloud-dropdown
+                                        │
+                                        └── p-dropdown
+                                              │
+                                              └── span[role=combobox]
+
+This is exactly how you should think when creating locators for this application.
+
+29. What NOT to use from your screenshots
+I would avoid these:
+
+❌ Angular generated attributes
+
+//*[@_ngcontent-ng-c2339295195]
+
+❌ Dynamic PrimeNG ID
+
+//*[@id='pn_id_532']
+
+❌ Generated Angular classes
+
+//*[contains(@class,'ng-star-inserted')]
+
+❌ Position-only XPath
+
+//table[2]/tbody/tr[1]/td[5]
+
+❌ Absolute XPath
+
+/html/body/div[1]/div[2]/...
+
+30. What I WOULD use
+Excellent
+
+//span[
+    @role='combobox'
+    and normalize-space(@aria-label)='Class'
+]
+
+Excellent with component context
+
+//xbs-dcloud-dropdown//span[
+    @role='combobox'
+    and normalize-space(@aria-label)='Class'
+]
+
+Excellent table anchor
+
+//div[@formarrayname='item_details']//table
+
+Excellent header
+
+//div[@formarrayname='item_details']
+    //table//thead//th[
+        .//span[normalize-space()='Packing']
+    ]
+
+Excellent UOM header
+
+//div[@formarrayname='item_details']
+    //table//thead//th[
+        .//span[normalize-space()='UOM']
+    ]
+
+Excellent option
+
+//li[
+    @role='option'
+    and normalize-space(@aria-label)='Agent'
+]
+
+31. One very important observation from your screenshot
+You can actually use:
+
+
+formarrayname="item_details"
+
+as a business/application-level anchor.
+
+That's better than many generic Angular classes.
+
+Your locator strategy can therefore evolve from:
+
+h3 → table
+
+to:
+
+formarrayname → table → header → column → td → PrimeNG component
+
+depending on which anchor is more stable in your application.
+
+I would test both approaches in DevTools and keep whichever gives the most stable 1 of 1 result.
+
+32. Your locator learning should now be based on 5 layers
+For this application, I recommend you mentally divide every locator into:
+
+LAYER 1
+Angular application context
+        ↓
+LAYER 2
+PrimeNG component
+        ↓
+LAYER 3
+DOM element
+        ↓
+LAYER 4
+Accessibility/business attributes
+        ↓
+LAYER 5
+State / synchronization
+
+Example:
+
+item_details
+    ↓
+xbs-dcloud-dropdown
+    ↓
+p-dropdown
+    ↓
+span
+    ↓
+role=combobox
+    ↓
+aria-label=Packing
+    ↓
+aria-expanded=true
+
+Once you start seeing the DOM this way, Angular + PrimeNG automation becomes much easier.
+
+Your next practical exercise
+Using the screenshots you provided, I recommend you test these one by one in Chrome DevTools:
+
+
+//div[@formarrayname='item_details']
+
+
+//div[@formarrayname='item_details']//table
+
+
+//div[@formarrayname='item_details']//table//thead//th[
+    .//span[normalize-space()='Packing']
+]
+
+
+//div[@formarrayname='item_details']//table//thead//th[
+    .//span[normalize-space()='UOM']
+]
+
+Then inspect one body row and find the corresponding dropdown.
+
+Send me the screenshot of the expanded <tbody><tr><td> for the Packing/UOM row. That will let me map your header → exact td → xbs-dcloud-dropdown → p-dropdown → combobox → overlay → option and give you a production-quality generic locator method for your ERP table.
+
+
+
+9a571c5a-4623-423e-a1d0-142a07969eb7.png
+
+Yes — this screenshot gives us a much clearer picture of your actual Angular + PrimeNG table structure. There are two important things here that directly affect how you should write your locators:
+
+Your table uses rowspan="3".
+Your PrimeNG dropdown is wrapped inside your custom Angular component xbs-dcloud-dropdown.
+These are very important for your automation framework.
+
+1. Let's read your actual DOM
+From the screenshot, the structure is approximately:
+
+
+<tbody>
+    <tr>
+
+        <td style="display: none;">
+            <xbs-dcloud-input-number>
+            </xbs-dcloud-input-number>
+        </td>
+
+        <td rowspan="3">
+            <xbs-dcloud-dropdown>
+                ...
+            </xbs-dcloud-dropdown>
+        </td>
+
+        <td>
+            <xbs-dcloud-input-number>
+            </xbs-dcloud-input-number>
+        </td>
+
+        <td>
+            <xbs-dcloud-dropdown>
+                ...
+            </xbs-dcloud-dropdown>
+        </td>
+
+    </tr>
+</tbody>
+
+And inside the last dropdown:
+
+td
+ ↓
+xbs-dcloud-dropdown
+ ↓
+div
+ ↓
+p-dropdown
+ ↓
+div#pn_id_567
+
+This is a very useful discovery.
+
+2. The biggest thing I notice: rowspan="3"
+You have:
+
+
+<td rowspan="3">
+
+This means that this particular cell belongs to three table rows.
+
+Visually:
+
+Row 1 ───────┐
+Row 2 ───────┤  Same TD
+Row 3 ───────┘
+
+For example:
+
+        Product
+          │
+          ▼
+┌─────────────────────────────┐
+│ Product │ Qty │ Packing │  │ ← Row 1
+│         │     │          │  │
+│         │ Qty │          │  │ ← Row 2
+│         │     │          │  │
+│         │ Qty │          │  │ ← Row 3
+└─────────────────────────────┘
+
+The Product <td> exists only once because of:
+
+
+rowspan="3"
+
+3. This affects your td[1], td[2], etc. strategy
+This is important.
+
+Suppose you do:
+
+
+//tbody/tr[1]/td[3]
+
+It may work for the first row.
+
+But:
+
+
+//tbody/tr[2]/td[3]
+
+may refer to a completely different logical column because the rowspan cell isn't repeated in the second <tr>.
+
+Therefore:
+
+
+
+Do not rely purely on td[n] when your table has rowspan/colspan.
+This is one reason your header → column relationship is much stronger.
+
+4. Your highlighted dropdown
+The highlighted structure appears to be:
+
+
+<td>
+    <xbs-dcloud-dropdown>
+        <div>
+            <p-dropdown
+                class="p-element p-inputwrapper ...">
+
+                <div
+                    id="pn_id_567"
+                    class="p-dropdown p-component ...">
+                </div>
+
+            </p-dropdown>
+        </div>
+    </xbs-dcloud-dropdown>
+</td>
+
+The important part is:
+
+
+<xbs-dcloud-dropdown>
+
+followed by:
+
+
+<p-dropdown>
+
+So your application has a custom wrapper around PrimeNG.
+
+5. Understand the two layers
+Your application:
+
+xbs-dcloud-dropdown
+
+is probably a custom component developed by your organization/project.
+
+Inside it:
+
+p-dropdown
+
+is PrimeNG.
+
+So:
+
+Your application
+       ↓
+xbs-dcloud-dropdown
+       ↓
+PrimeNG
+       ↓
+p-dropdown
+       ↓
+actual DOM
+
+This distinction is extremely useful when debugging.
+
+6. Don't use this generated ID
+Your screenshot shows:
+
+
+id="pn_id_567"
+
+Do NOT make this your primary locator:
+
+
+//*[@id='pn_id_567']
+
+Why?
+
+Because the next dropdown could be:
+
+pn_id_568
+pn_id_569
+pn_id_570
+
+and the IDs may change between executions.
+
+Instead, use semantic attributes.
+
+7. The locator I would investigate first
+From your previous screenshot we know the inner PrimeNG dropdown has:
+
+
+<span
+    role="combobox"
+    aria-label="Class"
+    aria-haspopup="listbox"
+    aria-expanded="false">
+
+Therefore:
+
+
+//xbs-dcloud-dropdown//span[@role='combobox']
+
+is a very good structural locator.
+
+If the accessible name is available:
+
+
+//xbs-dcloud-dropdown//span[
+    @role='combobox'
+    and normalize-space(@aria-label)='Class'
+]
+
+This is much more stable than:
+
+
+//div[@id='pn_id_567']
+
+8. Your screenshot reveals an important locator hierarchy
+For this dropdown:
+
+tbody
+ ↓
+tr
+ ↓
+td
+ ↓
+xbs-dcloud-dropdown
+ ↓
+p-dropdown
+ ↓
+span[role=combobox]
+
+Therefore, think about locators from outside → inside.
+
+Level 1
+
+//tbody
+
+Level 2
+
+//tbody/tr
+
+Level 3
+
+//tbody/tr/td
+
+Level 4
+
+//tbody/tr/td/xbs-dcloud-dropdown
+
+Level 5
+
+//tbody/tr/td/xbs-dcloud-dropdown//p-dropdown
+
+Level 6
+
+//tbody/tr/td/xbs-dcloud-dropdown//span[@role='combobox']
+
+That's how you should debug locators.
+
+9. Don't jump directly to the final XPath
+For example, don't immediately write:
+
+
+//div[@formarrayname='item_details']//table//tbody/tr[1]/td[4]//span[@role='combobox']
+
+Instead test each layer.
+
+Test 1
+
+//div[@formarrayname='item_details']
+
+Test 2
+
+//div[@formarrayname='item_details']//table
+
+Test 3
+
+//div[@formarrayname='item_details']//table//tbody/tr[1]
+
+Test 4
+
+//div[@formarrayname='item_details']//table//tbody/tr[1]/td
+
+Test 5
+
+//div[@formarrayname='item_details']//table//tbody/tr[1]/td//xbs-dcloud-dropdown
+
+Test 6
+
+//div[@formarrayname='item_details']//table//tbody/tr[1]/td//xbs-dcloud-dropdown//p-dropdown
+
+Test 7
+
+//div[@formarrayname='item_details']//table//tbody/tr[1]/td//xbs-dcloud-dropdown//span[@role='combobox']
+
+After each step check:
+
+1 of 1
+
+or:
+
+1 of 2
+1 of 5
+
+This will teach you exactly where the locator becomes too broad.
+
+10. Very important: your display:none
+Your first <td> shows:
+
+
+style="vertical-align: top; display: none;"
+
+This is another important Angular application behavior.
+
+That means the DOM contains:
+
+td
+ ↓
+display:none
+
+but the user cannot see it.
+
+So:
+
+
+//td
+
+will still find it.
+
+But Selenium cannot interact with something that's display:none.
+
+This demonstrates:
+
+
+
+DOM existence ≠ visibility.
+Exactly the issue we discussed earlier.
+
+11. Why presenceOfElementLocated() can fool you
+Suppose:
+
+
+//div[@formarrayname='item_details']//table//tbody/tr[1]/td[1]
+
+returns an element.
+
+This works:
+
+
+wait.until(
+    ExpectedConditions.presenceOfElementLocated(locator)
+);
+
+because the element exists.
+
+But:
+
+
+wait.until(
+    ExpectedConditions.visibilityOfElementLocated(locator)
+);
+
+will fail because:
+
+
+display:none
+
+Therefore:
+
+presence
+    ↓
+DOM only
+
+visibility
+    ↓
+DOM + visible
+
+clickable
+    ↓
+DOM + visible + enabled
+
+Remember this distinction.
+
+12. rowspan + hidden td = don't use blind indexes
+Your screenshot has both:
+
+
+rowspan="3"
+
+and:
+
+
+display:none
+
+Therefore something like:
+
+
+//tbody/tr[1]/td[4]
+
+is fragile.
+
+You might get the correct element today, but if the developer adds another hidden column:
+
+
+<td style="display:none">
+
+your index changes.
+
+13. Better approach: header → column
+You previously showed:
+
+
+<th>
+    <span>Packing</span>
+</th>
+
+<th>
+    <span>UOM</span>
+</th>
+
+So instead of saying:
+
+Packing = td[4]
+
+we say:
+
+Find Packing header
+        ↓
+Determine its column position
+        ↓
+Find corresponding body cell
+        ↓
+Find xbs-dcloud-dropdown
+        ↓
+Find PrimeNG combobox
+
+This is much more professional.
+
+14. Your generic XPath architecture
+For example:
+
+
+//div[@formarrayname='item_details']
+    //table
+    //tbody/tr[1]/td[
+        count(
+            //div[@formarrayname='item_details']
+            //table
+            //thead//th[
+                .//span[
+                    normalize-space()='Packing'
+                ]
+            ]
+            /preceding-sibling::th
+        ) + 1
+    ]
+    //xbs-dcloud-dropdown
+    //span[@role='combobox']
+
+Conceptually:
+
+item_details
+     ↓
+table
+     ↓
+Packing header
+     ↓
+count headers before Packing
+     ↓
+column number
+     ↓
+same body TD
+     ↓
+custom dropdown
+     ↓
+PrimeNG combobox
+
+15. But we need to be careful with rowspan
+Because your table uses:
+
+
+rowspan="3"
+
+I would not blindly assume the column index calculated from <th> always maps to td[n] for every row.
+
+For:
+
+tr[1]
+
+it may be fine.
+
+For:
+
+tr[2]
+
+the number of <td> elements may differ.
+
+This is why, for a table with rowspans, you should inspect each logical row structure before making the locator completely generic.
+
+16. For your current highlighted dropdown
+If the highlighted dropdown is in the first row and you're testing the first data row, this can be a reasonable starting point:
+
+
+//div[@formarrayname='item_details']
+    //table
+    //tbody/tr[1]
+    //td
+    //xbs-dcloud-dropdown
+    //span[@role='combobox']
+
+But this may return multiple dropdowns.
+
+If it returns:
+
+1 of 2
+
+then narrow it using the column relationship.
+
+17. Use xbs-dcloud-dropdown as an anchor
+This is one thing I would strongly recommend for your application.
+
+Instead of:
+
+
+//span[@role='combobox']
+
+use:
+
+
+//xbs-dcloud-dropdown//span[@role='combobox']
+
+This says:
+
+
+
+Find the PrimeNG combobox that belongs to our application's custom dropdown component.
+That's a good Angular + PrimeNG locator pattern.
+
+18. Even better: use aria-label
+If the field has:
+
+
+aria-label="Class"
+
+then:
+
+
+//xbs-dcloud-dropdown//span[
+    @role='combobox'
+    and normalize-space(@aria-label)='Class'
+]
+
+is excellent.
+
+For another field:
+
+
+//xbs-dcloud-dropdown//span[
+    @role='combobox'
+    and normalize-space(@aria-label)='Packing'
+]
+
+if the application exposes that label.
+
+19. Don't confuse Class with the visual field label
+Your previous screenshot showed:
+
+
+aria-label="Class"
+
+This might be a technical/accessibility label, while the visible label might be something else.
+
+Always inspect:
+
+aria-label
+label text
+placeholder
+formControlName
+
+and determine which one corresponds to the business field.
+
+Don't assume:
+
+aria-label = visible label
+
+although often they are related.
+
+20. PrimeNG p-dropdown itself
+You have:
+
+
+<p-dropdown
+    class="p-element p-inputwrapper ...">
+
+Then:
+
+
+<div
+    id="pn_id_567"
+    class="p-dropdown p-component ...">
+
+This tells us:
+
+p-dropdown
+
+is the component host, while:
+
+div.p-dropdown
+
+is the rendered visual container.
+
+And your earlier screenshot showed:
+
+span[role=combobox]
+
+inside it.
+
+So:
+
+
+//p-dropdown//span[@role='combobox']
+
+is a logical locator.
+
+21. Why I prefer role over PrimeNG classes
+You have classes such as:
+
+p-element
+p-dropdown
+p-component
+p-inputwrapper
+p-dropdown-clearable
+
+They are useful for understanding the DOM.
+
+But for production locators, I'd generally prefer:
+
+
+//span[@role='combobox']
+
+over:
+
+
+//div[contains(@class,'p-dropdown')]
+
+because semantic attributes communicate what the element does, not how PrimeNG styles it.
+
+22. The p-dropdown-trigger
+Your previous screenshot showed:
+
+
+<div
+    role="button"
+    aria-label="dropdown trigger"
+    aria-haspopup="listbox"
+    aria-expanded="false"
+    class="p-dropdown-trigger">
+</div>
+
+This gives you another possible interaction target.
+
+
+//div[
+    @role='button'
+    and @aria-label='dropdown trigger'
+]
+
+But globally this could match many dropdowns.
+
+Better:
+
+
+//xbs-dcloud-dropdown//div[
+    @role='button'
+    and @aria-label='dropdown trigger'
+]
+
+23. Which should you use?
+My preferred hierarchy for your application:
+
+First choice
+
+//xbs-dcloud-dropdown//span[@role='combobox']
+
+If field has a unique aria-label
+
+//xbs-dcloud-dropdown//span[
+    @role='combobox'
+    and normalize-space(@aria-label)='Class'
+]
+
+Alternative
+
+//xbs-dcloud-dropdown//div[
+    @role='button'
+    and @aria-label='dropdown trigger'
+]
+
+Avoid
+
+//*[@id='pn_id_567']
+
+24. Now connect this to your previous timeout
+Your previous exception was:
+
+TimeoutException
+waiting for element to be clickable,
+but the element was not visible
+
+Your screenshots now reveal three potential causes:
+
+Cause 1 — Horizontal scrolling
+You have:
+
+
+style="overflow-x: auto;"
+
+So the target could be outside the visible table area.
+
+Cause 2 — Hidden DOM elements
+You have:
+
+
+display:none
+
+So some matching elements may exist but be invisible.
+
+Cause 3 — PrimeNG overlay
+You have:
+
+
+<p-overlay>
+
+so dropdown options are likely rendered separately.
+
+This is a very strong explanation for the behavior you're seeing.
+
+25. Your complete PrimeNG dropdown flow
+For your application, think of a dropdown operation like this:
+
+Find table
+   ↓
+Find correct column
+   ↓
+Find TD
+   ↓
+Find xbs-dcloud-dropdown
+   ↓
+Find p-dropdown
+   ↓
+Find span[role=combobox]
+   ↓
+Wait for visibility
+   ↓
+Scroll horizontally
+   ↓
+Wait for clickable
+   ↓
+Click
+   ↓
+aria-expanded = true
+   ↓
+PrimeNG overlay appears
+   ↓
+Find visible li[role=option]
+   ↓
+Click option
+   ↓
+Wait for dropdown state/value update
+
+That's your complete automation model.
+
+26. I recommend this reusable Java method
+
+public WebElement waitForVisibility(By locator) {
+
+    WebDriverWait wait =
+            new WebDriverWait(driver, Duration.ofSeconds(40));
+
+    return wait.until(
+            ExpectedConditions.visibilityOfElementLocated(locator)
+    );
+}
+
+Then:
+
+
+public WebElement waitForClickable(By locator) {
+
+    WebDriverWait wait =
+            new WebDriverWait(driver, Duration.ofSeconds(40));
+
+    return wait.until(
+            ExpectedConditions.elementToBeClickable(locator)
+    );
+}
+
+And:
+
+
+public void scrollToElement(By locator) {
+
+    WebElement element =
+            driver.findElement(locator);
+
+    ((JavascriptExecutor) driver).executeScript(
+            "arguments[0].scrollIntoView({" +
+            "behavior:'instant'," +
+            "block:'center'," +
+            "inline:'center'" +
+            "});",
+            element
+    );
+}
+
+27. Then your dropdown code
+
+By dropdownLocator =
+        getItemDetailsDropdown("Packing");
+
+scrollToElement(dropdownLocator);
+
+waitForVisibility(dropdownLocator);
+
+waitForClickable(dropdownLocator).click();
+
+Then option:
+
+
+By optionLocator = By.xpath(
+        "//li[@role='option' and " +
+        "normalize-space(@aria-label)='" +
+        value.trim() +
+        "']"
+);
+
+Then:
+
+
+WebElement option = new WebDriverWait(driver, Duration.ofSeconds(40))
+        .until(d ->
+                d.findElements(optionLocator)
+                        .stream()
+                        .filter(WebElement::isDisplayed)
+                        .findFirst()
+                        .orElse(null)
+        );
+
+option.click();
+
+28. One improvement I'd make to your framework
+Don't make:
+
+
+explicitWaitVisibility(WebDriver driver, WebElement element)
+
+your main method.
+
+Use:
+
+
+explicitWaitVisibility(WebDriver driver, By locator)
+
+because Angular can rerender the element.
+
+Recommended:
+
+
+public WebElement explicitWaitVisibility(
+        WebDriver driver,
+        By locator) {
+
+    WebDriverWait wait =
+            new WebDriverWait(driver, Duration.ofSeconds(40));
+
+    return wait.until(
+            ExpectedConditions.visibilityOfElementLocated(locator)
+    );
+}
+
+And:
+
+
+public WebElement explicitWaitClickable(
+        WebDriver driver,
+        By locator) {
+
+    WebDriverWait wait =
+            new WebDriverWait(driver, Duration.ofSeconds(40));
+
+    return wait.until(
+            ExpectedConditions.elementToBeClickable(locator)
+    );
+}
+
+This fits your Angular application much better.
+
+29. One thing I want you to test now
+For the dropdown highlighted in your screenshot, run these in order in Chrome DevTools.
+
+A
+
+//div[@formarrayname='item_details']
+
+B
+
+//div[@formarrayname='item_details']//table
+
+C
+
+//div[@formarrayname='item_details']//table//tbody/tr[1]
+
+D
+
+//div[@formarrayname='item_details']//table//tbody/tr[1]//xbs-dcloud-dropdown
+
+E
+
+//div[@formarrayname='item_details']//table//tbody/tr[1]//xbs-dcloud-dropdown//p-dropdown
+
+F
+
+//div[@formarrayname='item_details']//table//tbody/tr[1]//xbs-dcloud-dropdown//span[@role='combobox']
+
+For each one, tell me the result:
+
+A → ? of ?
+B → ? of ?
+C → ? of ?
+D → ? of ?
+E → ? of ?
+F → ? of ?
+
+Especially send me the result for D, E and F.
