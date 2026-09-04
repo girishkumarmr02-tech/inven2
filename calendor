@@ -1,0 +1,673 @@
+I need you to act as a **Senior Selenium Java + TestNG + Cucumber + PrimeNG/Angular Automation Engineer and Locator Specialist**.
+
+I want to implement a **dynamic date-range calendar automation from scratch**, using my actual application's HTML and WebElements.
+
+## OBJECTIVE
+
+I need to automate the following flow in my ERP application:
+
+1. Navigate to the **Product Details** section.
+2. Identify the **Target Date Range** column dynamically.
+3. Find the calendar/date-range WebElement inside the correct table cell.
+4. Click the calendar.
+5. Select a **Start Date**.
+6. Select an **End Date**.
+7. Verify that the selected date range is correct.
+8. The implementation must be **dynamic and maintainable**.
+9. Do NOT hardcode table column numbers such as `td[4]`, `td[5]`, etc.
+10. Do NOT hardcode calendar DOM indexes such as `[1]`, unless you explain why it is absolutely required.
+11. Do NOT blindly suggest XPath. First analyze the HTML/DOM structure I provide.
+12. Prefer stable, semantic locators based on labels, attributes, relationships, roles, accessible names, and DOM structure.
+13. The solution must work reliably with **Angular + PrimeNG** components.
+14. Use Selenium Java.
+15. Use explicit waits rather than `Thread.sleep()`.
+16. Follow Page Object Model principles.
+17. Keep reusable Selenium methods inside my utility/common library where appropriate.
+
+---
+
+# VERY IMPORTANT: INTERACTIVE STEP-BY-STEP MODE
+
+Do NOT give me the entire implementation at once.
+
+I want you to teach and implement it **one step at a time**.
+
+The workflow must be:
+
+### STEP 1
+
+Analyze the HTML/DOM that I provide.
+
+Explain:
+
+* What component is being used.
+* Whether it is PrimeNG Calendar, DatePicker, p-calendar, p-datepicker, input, button, calendaricon, etc.
+* Which element is actually clickable.
+* Which element contains/opens the calendar.
+* Which element represents the date input.
+* Which elements represent start/end dates.
+* How PrimeNG renders the calendar popup.
+* Whether the calendar is a single-date picker or date-range picker.
+* What attributes/classes/roles are useful.
+* Which attributes/classes should NOT be trusted because they may be dynamic.
+
+Then stop.
+
+Ask me to confirm or provide the next required HTML if anything is missing.
+
+DO NOT move to Step 2 until I say:
+
+"STEP 1 DONE"
+
+---
+
+### STEP 2 — LOCATOR STRATEGY
+
+After I confirm Step 1:
+
+Analyze all possible locator strategies for the calendar.
+
+Show me:
+
+1. ID locator
+2. Name locator
+3. CSS selector
+4. XPath
+5. Relative XPath
+6. Parent-child relationship
+7. Label-based relationship
+8. ARIA/role-based locator
+9. PrimeNG-specific locator
+10. Dynamic table-column locator
+
+For each method explain:
+
+* Stability
+* Readability
+* Maintainability
+* Risk of breaking
+* Whether I should use it in a professional automation framework
+
+Then select the **best locator strategy for my actual HTML**.
+
+Do not immediately implement it.
+
+Stop and ask me to confirm.
+
+Wait for:
+
+"STEP 2 DONE"
+
+---
+
+### STEP 3 — BUILD THE DYNAMIC TABLE LOCATOR
+
+After confirmation:
+
+Build the locator starting from:
+
+`Product Details`
+
+Then:
+
+`Product Details → first relevant table → Target Date Range header → dynamically determine column index → corresponding tbody cell → calendar/date element`
+
+The column number MUST NOT be hardcoded.
+
+For example, instead of:
+
+```xpath
+td[4]
+```
+
+derive the position from:
+
+```xpath
+count(preceding-sibling::th) + 1
+```
+
+or another better strategy if the HTML supports it.
+
+Explain every XPath axis used:
+
+* `following::`
+* `following-sibling::`
+* `preceding-sibling::`
+* `ancestor::`
+* `descendant::`
+* `.//`
+* `//`
+* `[1]`
+* `count()`
+* `normalize-space()`
+* `contains()`
+
+Then test the XPath logically against the HTML I supplied.
+
+Stop.
+
+Wait for:
+
+"STEP 3 DONE"
+
+---
+
+### STEP 4 — IDENTIFY THE ACTUAL CLICKABLE CALENDAR ELEMENT
+
+Determine whether I should click:
+
+```html
+<input>
+```
+
+or:
+
+```html
+<button>
+```
+
+or:
+
+```html
+<calendaricon>
+```
+
+or:
+
+```html
+<p-calendar>
+```
+
+or another PrimeNG element.
+
+Explain why.
+
+Do not assume that the visible calendar icon is the correct Selenium target.
+
+If clicking the icon is correct, provide the locator.
+
+If clicking the input is more reliable, explain why.
+
+Then stop.
+
+Wait for:
+
+"STEP 4 DONE"
+
+---
+
+### STEP 5 — SELENIUM WAIT STRATEGY
+
+Implement the appropriate explicit waits.
+
+Consider:
+
+```java
+WebDriverWait
+ExpectedConditions
+elementToBeClickable
+visibilityOfElementLocated
+presenceOfElementLocated
+visibilityOf
+```
+
+Explain when each should be used.
+
+Do NOT use:
+
+```java
+Thread.sleep()
+```
+
+unless you are explaining why it should NOT be used.
+
+Then provide the wait implementation for my actual element.
+
+Stop.
+
+Wait for:
+
+"STEP 5 DONE"
+
+---
+
+### STEP 6 — CLICK THE CALENDAR
+
+Implement the click.
+
+Prefer:
+
+```java
+WebElement calendar = wait.until(
+    ExpectedConditions.elementToBeClickable(locator)
+);
+
+calendar.click();
+```
+
+But adapt this to the actual HTML.
+
+If normal `.click()` is unreliable because of PrimeNG/Angular overlays, explain the cause and provide safer alternatives.
+
+Do NOT immediately use JavaScript click.
+
+If JavaScript click is needed, explain why normal Selenium click failed before using it.
+
+Stop.
+
+Wait for:
+
+"STEP 6 DONE"
+
+---
+
+### STEP 7 — ANALYZE THE CALENDAR POPUP HTML
+
+After clicking the calendar, I will provide the HTML of the opened calendar popup.
+
+Analyze it from scratch.
+
+Identify:
+
+* Calendar container
+* Month
+* Year
+* Previous month button
+* Next month button
+* Current month
+* Day cells
+* Disabled dates
+* Selected dates
+* Start-date selection
+* End-date selection
+* Range-selection classes
+* `aria-label`
+* `role`
+* `tabindex`
+* PrimeNG-specific attributes
+
+Explain exactly how PrimeNG represents dates in the DOM.
+
+Do NOT assume the date format.
+
+Stop.
+
+Wait for:
+
+"STEP 7 DONE"
+
+---
+
+### STEP 8 — START DATE SELECTION
+
+Implement dynamic Start Date selection.
+
+The Start Date MUST be supplied as a variable, for example:
+
+```java
+String startDate = "2026-09-10";
+```
+
+or preferably using an appropriate date type such as:
+
+```java
+LocalDate startDate
+```
+
+Do NOT hardcode the date directly inside XPath.
+
+For example, avoid:
+
+```xpath
+//td[text()='10']
+```
+
+Instead dynamically construct the locator based on the actual calendar HTML.
+
+If the calendar is on another month/year, implement navigation dynamically.
+
+Do NOT assume the required date is always in the current month.
+
+Explain:
+
+1. How to determine displayed month/year.
+2. How to compare it with requested month/year.
+3. How to navigate forward/backward.
+4. How to identify the correct day.
+5. How to avoid selecting days belonging to adjacent months.
+6. How to avoid disabled dates.
+7. How to click the start date.
+
+Stop.
+
+Wait for:
+
+"STEP 8 DONE"
+
+---
+
+### STEP 9 — END DATE SELECTION
+
+Implement dynamic End Date selection.
+
+Example:
+
+```java
+LocalDate startDate = LocalDate.of(2026, 9, 10);
+LocalDate endDate = LocalDate.of(2026, 9, 20);
+```
+
+The end date must NOT be hardcoded into XPath.
+
+If the calendar automatically switches month after selecting the start date, account for that.
+
+If it does not switch month, navigate dynamically.
+
+Explain how the range selection works in the actual PrimeNG implementation.
+
+Then implement the end-date click.
+
+Stop.
+
+Wait for:
+
+"STEP 9 DONE"
+
+---
+
+### STEP 10 — VERIFY THE SELECTED RANGE
+
+Implement verification.
+
+Do NOT verify merely because Selenium clicked the dates.
+
+Verify the actual application state.
+
+Depending on the HTML, verify one or more of:
+
+* Input value
+* `value` attribute
+* `aria-label`
+* selected start-date class
+* selected end-date class
+* range-highlight class
+* calendar component state
+* displayed date range
+
+Example concept:
+
+```java
+String actualValue = dateInput.getAttribute("value");
+
+Assert.assertEquals(
+    actualValue,
+    expectedDateRange
+);
+```
+
+But adapt this to my application's actual HTML.
+
+Explain why the chosen verification method is reliable.
+
+Stop.
+
+Wait for:
+
+"STEP 10 DONE"
+
+---
+
+### STEP 11 — HANDLE REAL-WORLD FAILURES
+
+After the basic implementation works, analyze possible failures:
+
+* ElementNotInteractableException
+* InvalidElementStateException
+* ElementClickInterceptedException
+* StaleElementReferenceException
+* TimeoutException
+* NoSuchElementException
+* calendar overlay not visible
+* date not clickable
+* disabled date
+* Angular DOM re-render
+* PrimeNG overlay appended outside the table
+* month navigation failure
+* duplicate day numbers
+* dates from previous/next month
+* calendar animation
+* dynamically generated classes
+
+For each failure provide:
+
+Cause → Diagnosis → Correct solution.
+
+Do NOT recommend random sleeps or unnecessary JavaScript.
+
+Stop.
+
+Wait for:
+
+"STEP 11 DONE"
+
+---
+
+### STEP 12 — PAGE OBJECT MODEL IMPLEMENTATION
+
+Only after the locator and behavior are proven, convert the working implementation into my framework.
+
+I am using:
+
+* Java 21
+* Selenium
+* TestNG
+* Cucumber
+* Maven
+* Page Object Model
+* DriverFactory
+* WebDriverCommonLibrary/common utilities
+
+Separate the code properly:
+
+### Page class
+
+Contains:
+
+* locators
+* page-specific actions
+* calendar/date-range methods
+
+### Utility/common library
+
+Contains reusable:
+
+* waits
+* click methods
+* visibility methods
+* JavaScript fallback only when necessary
+* highlighting/debugging methods if appropriate
+
+### Step definitions
+
+Should call page methods and should NOT contain complicated XPath logic.
+
+### Test data
+
+Dates should come from:
+
+* scenario parameters
+* configuration
+* test data
+* DataTable
+* variables
+
+NOT directly from XPath.
+
+Stop after providing the design.
+
+Wait for:
+
+"STEP 12 DONE"
+
+---
+
+### STEP 13 — FINAL PRODUCTION IMPLEMENTATION
+
+After I confirm everything:
+
+Provide the complete final implementation.
+
+Include:
+
+1. Page Object
+2. Locators
+3. Date-range method
+4. Wait methods
+5. Start-date selection
+6. End-date selection
+7. Month/year navigation
+8. Verification
+9. TestNG/Cucumber usage
+10. Example feature scenario if applicable
+11. Required imports
+12. Explanation of where every method belongs
+
+The final implementation must be:
+
+* Dynamic
+* Reusable
+* Maintainable
+* No hardcoded column number
+* No hardcoded date
+* No `Thread.sleep()`
+* No unnecessary JavaScript
+* Compatible with Java 21
+* Selenium best practices
+* Suitable for an enterprise automation framework
+
+---
+
+# IMPORTANT RULES
+
+### Rule 1 — DO NOT GUESS
+
+If I have not provided enough HTML, tell me exactly what HTML you need.
+
+For example:
+
+"Please provide the outerHTML of the Target Date Range `<td>`."
+
+Do not invent the DOM.
+
+### Rule 2 — USE MY ACTUAL HTML
+
+Every locator must be based on the HTML I provide.
+
+### Rule 3 — EXPLAIN BEFORE IMPLEMENTING
+
+First explain the approach.
+
+Then implement.
+
+### Rule 4 — ONE STEP AT A TIME
+
+Never jump from Step 1 to Step 10.
+
+Wait for my confirmation after each step.
+
+### Rule 5 — SHOW ALTERNATIVES
+
+When there are multiple valid locator strategies, explain them and tell me which one you recommend.
+
+### Rule 6 — NO HARDCODING
+
+Do not hardcode:
+
+* `td[4]`
+* `td[5]`
+* calendar indexes
+* day numbers
+* month names
+* year values
+* fixed dates
+
+unless the HTML proves that the value is structurally fixed, and clearly explain the reason.
+
+### Rule 7 — DYNAMIC DATE DATA
+
+Use:
+
+```java
+LocalDate
+```
+
+where appropriate.
+
+Example:
+
+```java
+LocalDate startDate;
+LocalDate endDate;
+```
+
+### Rule 8 — PRIME NG / ANGULAR
+
+Treat PrimeNG overlays carefully.
+
+Remember that the calendar popup may be rendered somewhere else in the DOM, outside the original `<td>`.
+
+Therefore:
+
+**The locator used to open the calendar and the locator used to select dates may need to be different.**
+
+### Rule 9 — DEBUGGING
+
+When a locator fails, do not immediately replace it with another random XPath.
+
+First explain:
+
+1. What Selenium found.
+2. What we expected.
+3. Why the locator failed.
+4. What DOM relationship should be used instead.
+
+### Rule 10 — PROFESSIONAL QUALITY
+
+Think like a Senior SDET reviewing production automation code.
+
+Prioritize:
+
+```text
+Stable locator
+      ↓
+Correct DOM scope
+      ↓
+Explicit wait
+      ↓
+Reusable method
+      ↓
+Dynamic test data
+      ↓
+Verification
+      ↓
+Error handling
+```
+
+---
+
+# START NOW
+
+I will provide you with:
+
+1. Screenshot of the Target Date Range field
+2. OuterHTML of the Target Date Range element
+3. OuterHTML of the table/header if required
+4. OuterHTML of the opened calendar popup after clicking it
+
+Start with **STEP 1 ONLY**.
+
+Do not provide implementation yet.
+
+After analyzing my HTML, tell me exactly what additional HTML/screenshot you need, if anything.
+
+Then wait for my confirmation before continuing.
