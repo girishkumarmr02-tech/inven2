@@ -6,7 +6,7 @@ import io.cucumber.testng.CucumberOptions;
 @CucumberOptions(
         features = "src/test/resources/features",
         glue = {"steps","hooks"},
-        tags = "@XBS_Commodity_Contract_Management_Flow",
+        tags = "@XBS_Commodity_Contract_Management_Flow_with_MultipleProductdata",
         plugin = {"pretty",
                 "html:target/cucumber-reports/cucumber.html",
                 "json:target/cucumber-reports/cucumber.json",

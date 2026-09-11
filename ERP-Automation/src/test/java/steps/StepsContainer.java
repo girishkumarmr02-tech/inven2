@@ -1,7 +1,9 @@
 package steps;
 
+import utils.DateExpressionResolver;
 import base.DriverFactory;
-import io.cucumber.java.PendingException;
+import invensoft.testdata.ContractTestData;
+import invensoft.testdata.ProductDetailRow;
 import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
@@ -12,10 +14,14 @@ import org.openqa.selenium.WebElement;
 import org.testng.Assert;
 import pages.CommodityContractManagementPage;
 import pages.LoginPage;
-import utils.ConfigReader;
-import utils.WebDriverCommonLibrary;
+import pages.PageObjectManager;
+import utils.*;
 
+import java.io.IOException;
 import java.time.LocalDate;
+import java.util.List;
+
+import static utils.Constants.setTime;
 
 public class StepsContainer {
 
@@ -23,6 +29,8 @@ public class StepsContainer {
     private LoginPage loginPage;
     private WebDriver driver;
     private WebDriverCommonLibrary webDriverCommonLibrary;
+    private PageObjectManager pageObjectManager;
+
 
 
     @Given("open browser")
@@ -108,6 +116,7 @@ public class StepsContainer {
     public void clicksOnIconOnTheCommodityContractManagementDashboard(String arg0, String arg1) {
         WebElement element = driver.findElement(By.xpath("//p-button[contains(@icon,'pi pi-" + arg1 + "')]//button"));
         element.click();
+        webDriverCommonLibrary.waitForSetTime(200);
     }
 
     @Then("verifies that the {string} popup is displayed")
@@ -187,11 +196,7 @@ public class StepsContainer {
         WebElement dropdown = webDriverCommonLibrary.explicitWaitByLocator(driver, dropdownLocator);
 
         // 3. Scroll
-        webDriverCommonLibrary.scrollIntoTheView(
-                driver,
-                dropdown
-        );
-
+        webDriverCommonLibrary.scrollIntoTheView(driver, dropdown);
         // 4. Click
         dropdown.click();
 
@@ -248,13 +253,6 @@ public class StepsContainer {
         numberField.sendKeys(value);
     }
 
-    @When("user selects target date range from {string} to {string} in the {string} field in the {string} table")
-    public void userSelectsTargetDateRangeInTheFieldInTheTable(String startDateStr, String endDateStr, String field, String table) {
-        CommodityContractManagementPage commodityContractManagementPage = new CommodityContractManagementPage(DriverFactory.getDriver());
-        LocalDate startDate = LocalDate.parse(startDateStr); // ISO format yyyy-MM-dd
-        LocalDate endDate = LocalDate.parse(endDateStr);
-        webDriverCommonLibrary.selectTargetDateRangeInTable(field, table, startDate, endDate);
-    }
 
      @When("user enters {string} in {string} long text area field in the {string} section")
     public void userEntersInLongTextAreaFieldInTheSection(String value, String field, String section) {
@@ -273,5 +271,171 @@ public class StepsContainer {
         LocalDate startDate = LocalDate.parse(startDateStr); // ISO format yyyy-MM-dd
         LocalDate endDate = LocalDate.parse(endDateStr);
         webDriverCommonLibrary.testselectTargetDateRangeInTable(field, table, startDate, endDate);
+    }
+
+    @When("user selects target date range from {string} to {string} for row {int}  {string} field in the {string} table")
+    public void userSelectsTargetDateRangeFromToForRowFieldInTheTable(String startDateStr, String endDateStr, int rowIndex, String field, String table) {
+        LocalDate startDate = DateExpressionResolver.resolve(startDateStr);
+        LocalDate endDate = DateExpressionResolver.resolve(endDateStr);
+        PageObjectManager.getCreateCommodityContractPage().setTargetDateRange(rowIndex, startDate, endDate);
+    }
+
+    @And("verify {string} field is displaying in list view")
+    public void verifyFieldIsDisplayingInListView(String arg0) {
+        WebElement listelement = driver.findElement(By.xpath("//thead[@role='rowgroup']/tr//span[normalize-space()='"+arg0+"']"));
+        webDriverCommonLibrary.scrollIntoTheView(driver,listelement);
+        webDriverCommonLibrary.explicitWait(driver,listelement);
+        webDriverCommonLibrary.highLightTheElement(driver,listelement);
+    }
+
+    @Then("the successful validation message {string} is displayed")
+    public void theSuccessfulValidationMessageIsDisplayed(String arg0) {
+        By successMsg = By.xpath("//*[contains(normalize-space(.),'Contract created successfully')]");
+        webDriverCommonLibrary.explicitWaitVisibilityByLocator(driver,successMsg);
+    }
+
+    @Then("capture {string} {string}")
+    public void capture(String arg0, String arg1) {
+        String xpath = "";
+        switch (arg1) {
+            case "Contract No.":
+                xpath = "//tbody[contains(@class,'p-datatable-tbody')]/tr/td[count(//th[contains(normalize-space(.),'"+arg1+"')]/preceding-sibling::th)+1]";
+                break;
+            default:
+                xpath = "//div[contains(@class,'active')]//slot[contains(@class,'title') and contains(@class,'header')]//lightning-formatted-text";
+        }
+        webDriverCommonLibrary.waitForSetTime(setTime / 2);
+        webDriverCommonLibrary.updateTheValueInDataValuePropertiesFile(arg1, driver.findElement(By.xpath(xpath)).getText());
+    }
+
+    @When("the user selects the {string} checkbox under {string}")
+    public void theUserSelectsTheCheckboxUnder(String arg0, String arg1) {
+    WebElement checkbox = driver.findElement(By.xpath("//div[input[@type='checkbox'] and contains(normalize-space(.),'"+arg0+"')]/input[@type='checkbox']"));
+    webDriverCommonLibrary.explicitWait(driver,checkbox);
+    webDriverCommonLibrary.scrollIntoTheView(driver,checkbox);
+    webDriverCommonLibrary.highLightTheElement(driver,checkbox);
+    checkbox.click();
+    }
+
+    @Then("verify {string}{string} prime icon button is displayed on the Commercial Commodity Contract Management dashboard")
+    public void verifyPrimeIconButtonIsDisplayedOnTheCommercialCommodityContractManagementDashboard(String arg0, String arg1) {
+        webDriverCommonLibrary.highLightTheElement(driver, driver.findElement(By.xpath("//span[contains(normalize-space(.),'"+arg1+"')]")));
+    }
+
+    @When("user selects {string} from the {string} literal dropdown in the {string} section")
+    public void userSelectsFromTheLiteralDropdownInTheSection(String value, String field, String section) {
+        CommodityContractManagementPage commodityContractManagementPage = new CommodityContractManagementPage(DriverFactory.getDriver());
+        commodityContractManagementPage.selectLiteralDropdownValue(section, field, value);
+    }
+
+    @Given("user fills product details for test case {string}")
+    public void userFillsProductDetailsForTestCase(String testCaseId) throws IOException {
+        ContractTestData data = TestDataReader.getByTestCaseId(testCaseId);
+        List<ProductDetailRow> rows = data.getProductDetails();
+        CommodityContractManagementPage page = pageObjectManager.getCommodityContractManagementPage();
+
+        final String section = "Product Details";
+
+        for (int i = 0; i < rows.size(); i++) {
+            ProductDetailRow row = rows.get(i);
+            int rowIndex = i;
+
+            System.out.println("Row " + rowIndex + " -> product = [" + row.getProduct() + "]");
+
+            if (isBlank(row.getProduct())) continue;
+            if (i > 0) {
+
+                System.out.println("========================================");
+                System.out.println("BEFORE ADDING PRODUCT DETAIL ROW");
+                System.out.println("Current row index = " + rowIndex);
+                System.out.println("========================================");
+
+                page.printProductDetailRowCount();
+                page.debugLastProductDetailRow();
+                page.debugProductDetailAddButtons(section);
+                page.debugRowValidity(rowIndex - 1);
+                page.addProductDetailRow(section);
+                webDriverCommonLibrary.waitForSetTime(300);
+                page.debugAllProductDetailTables();
+
+            }
+            page.debugProductDetailActionButtons(1);
+            page.debugLastProductDetailRow();
+
+            // Dropdowns
+            page.selectDropdownValue(section, "Product", rowIndex, row.getProduct());
+            page.userEnterInTheNumberFieldInTheTable("Units", section, rowIndex, row.getUnits());
+            page.selectTableType2DropdownValues(section, "Packing", rowIndex, row.getPacking());
+            // UOM intentionally skipped — auto-selected when Product is chosen (per your note)
+            page.userEnterInTheNumberFieldInTheTable("Qty.", section, rowIndex, row.getQty());
+            page.userEnterInTheNumberFieldInTheTable("No Of Lots.", section, rowIndex, row.getNoOfLots());
+            page.userEnterInTheNumberFieldInTheTable("Price", section, rowIndex, row.getPrice());
+
+            if (isNotBlank(row.getTargetType())) {
+                page.selectProductDetailValue(section, "Target Type", rowIndex, row.getTargetType());
+            }
+            if (isNotBlank(row.getTradeMonth())) {
+                page.selectDropdownValue(section, "Trade Month", rowIndex, row.getTradeMonth());
+            }
+
+//            // Plain text fields — each written exactly once now
+//            if (isNotBlank(row.getPositionMonth())) {
+//                page.enterFieldValue("Position Month", section, rowIndex, row.getPositionMonth());
+//            }
+            if (isNotBlank(row.getQuality())) {
+                page.enterFieldValue("Quality", section, rowIndex, row.getQuality());
+            }
+
+            // Date range — delegates to your existing, verified setTargetDateRange method
+            if (isNotBlank(row.getTargetDateRange())) {
+                fillTargetDateRangeFromJson(row.getTargetDateRange(), rowIndex);
+            }
+
+            // certificationPremium from your sample JSON isn't wired to any UI call yet —
+            // add a line here once you tell me which control it maps to.
+        }
+    }
+
+    private boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
+    }
+
+    private boolean isNotBlank(String s) {
+        return !isBlank(s);
+    }
+
+    // Assumed to already exist in your codebase per your comment — signature
+    // shown here just for reference/consistency with the rowIndex convention above.
+    private void fillTargetDateRangeFromJson(String targetDateRange, int rowIndex) {
+        // Split on " - " (space, hyphen, space) specifically — NOT a bare "-" —
+        // because a single expression can itself contain arithmetic like
+        // "today-2" or "today+4", and a naive split on any hyphen would
+        // break those. \\s+ tolerates inconsistent spacing in the JSON.
+        String[] parts = targetDateRange.split("\\s+-\\s+", 2);
+        if (parts.length != 2) {
+            throw new IllegalArgumentException(
+                    "targetDateRange '" + targetDateRange + "' for row " + rowIndex +
+                            " is not in the expected '<start> - <end>' format (e.g. 'today - today+4')."
+            );
+        }
+
+        String startExpr = parts[0].trim();
+        String endExpr = parts[1].trim();
+
+        LocalDate startDate = DateExpressionResolver.resolve(startExpr);
+        LocalDate endDate = DateExpressionResolver.resolve(endExpr);
+
+        // buildDateRangeLocator() uses a 1-based XPath sibling predicate
+        // (following-sibling::div[rowIndex]), while this loop's rowIndex is
+        // 0-based to match tbody-tr JS array indexing used everywhere else.
+        // Convert ONLY at this call site — do not change the verified
+        // locator method itself.
+        int xpathRowIndex = rowIndex + 1;
+
+        // ASSUMPTION: setTargetDateRange lives on the same page object as
+        // everything else in this loop (CommodityContractManagementPage).
+        // If it's actually a separate CreateCommodityContractPage class,
+        // swap this to pageObjectManager.getCreateCommodityContractPage().
+        pageObjectManager.getCreateCommodityContractPage().setTargetDateRange(xpathRowIndex, startDate, endDate);
     }
 }

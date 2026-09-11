@@ -1,7 +1,13 @@
 package utils;
 
 import io.cucumber.core.options.Constants;
-import io.cucumber.java.it.Date;
+
+import org.apache.commons.configuration2.PropertiesConfiguration;
+import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
+import org.apache.commons.configuration2.builder.fluent.Parameters;
+import org.apache.commons.configuration2.ex.ConfigurationException;
+import java.io.File;
+
 import org.openqa.selenium.*;
 import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
@@ -9,7 +15,7 @@ import org.openqa.selenium.support.ui.FluentWait;
 import org.openqa.selenium.support.ui.Wait;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
-import java.text.SimpleDateFormat;
+import java.io.File;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.Month;
@@ -17,7 +23,6 @@ import java.time.YearMonth;
 import java.util.List;
 import java.util.function.Function;
 
-import static io.cucumber.core.options.Constants.*;
 import static java.lang.Thread.*;
 
 public class WebDriverCommonLibrary {
@@ -26,7 +31,6 @@ public class WebDriverCommonLibrary {
 
     public WebDriverCommonLibrary(WebDriver driver) {
         this.driver = driver;
-
     }
 
     public WebElement explicitWait(WebDriver driver, WebElement element) {
@@ -56,6 +60,12 @@ public class WebDriverCommonLibrary {
         ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({behavior: 'auto', block: 'center', inline: 'nearest'});", element);
         ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block:'center', inline:'center'});", element);
     }
+
+    public void scrollIntoTheViewNearest(final WebDriver driver, final WebElement element) {
+        JavascriptExecutor js = (JavascriptExecutor) driver;
+        js.executeScript("arguments[0].scrollIntoView({block: 'nearest', inline: 'center'});", element);
+    }
+
 
     public void highLightTheElement(final WebDriver driver, final WebElement ele) {
         JavascriptExecutor jsExe = (JavascriptExecutor) driver;
@@ -190,7 +200,94 @@ public class WebDriverCommonLibrary {
         By targetDateRange = By.xpath("//p-calendar[@selectionmode='range']" + "//input[@role='combobox' and @aria-haspopup='dialog']");
         WebElement targetDateRangeElement = webDriverCommonLibrary.explicitWaitByLocator(driver, targetDateRange);
         webDriverCommonLibrary.scrollIntoTheView(driver,targetDateRangeElement);
-        targetDateRangeElement.click();
+        webDriverCommonLibrary.clickUsingActionClass(driver,targetDateRangeElement);
+        webDriverCommonLibrary.clickWithJavaScriptExecutor(driver,targetDateRangeElement);
 
     }
+
+
+    public void waitForSetTime(int tt) {
+        try {
+            Thread.sleep(tt);
+        } catch (Exception e) {
+            e.getMessage();
+        }
+    }
+
+    public void updateTheValueInDataValuePropertiesFile(String key, String value) {
+        String resourcesDir = System.getProperty("resources", "src/test/resources");
+        String fileName = resourcesDir + File.separator + "config" + File.separator + "values.properties";
+
+        Parameters params = new Parameters();
+        FileBasedConfigurationBuilder<PropertiesConfiguration> builder =
+                new FileBasedConfigurationBuilder<>(PropertiesConfiguration.class)
+                        .configure(params.properties().setFileName(fileName));
+
+        try {
+            PropertiesConfiguration config = builder.getConfiguration();
+            config.setProperty(key, value.trim());
+            builder.save();
+        } catch (ConfigurationException e) {
+            System.out.println("Failed to update " + key + " in " + fileName + ": " + e.getMessage());
+            throw new RuntimeException(e);
+        }
+    }
+    public void explicitWaitInvisibility(WebDriver driver, By locator) {
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(40));
+        wait.until(ExpectedConditions.invisibilityOfElementLocated(locator));
+    }
+
+    public WebElement getVisibleCellByHeaderText(WebDriver driver, String columnHeaderText, int rowIndex) {
+        JavascriptExecutor js = (JavascriptExecutor) driver;
+
+        Object result = js.executeScript(
+                "let tables = [...document.querySelectorAll('table')];" +
+                        "let table = tables.find(t => [...t.querySelectorAll('thead th')]" +
+                        "  .some(th => th.textContent.trim() === arguments[0]));" +
+                        "if (!table) return null;" +
+                        "let targetTh = [...table.querySelectorAll('thead th')]" +
+                        "  .find(th => th.textContent.trim() === arguments[0]);" +
+                        "let thRect = targetTh.getBoundingClientRect();" +
+                        "let targetX = thRect.left + thRect.width / 2;" +
+                        "let row = table.querySelectorAll('tbody tr')[arguments[1]];" +
+                        "let cells = [...row.querySelectorAll('td')].filter(td => {" +
+                        "  let style = td.getAttribute('style') || '';" +
+                        "  return !style.includes('display: none') && td.getBoundingClientRect().width > 0;" +
+                        "});" +
+                        "let best = null, bestDist = Infinity;" +
+                        "cells.forEach(td => {" +
+                        "  let r = td.getBoundingClientRect();" +
+                        "  let center = r.left + r.width / 2;" +
+                        "  let dist = Math.abs(center - targetX);" +
+                        "  if (dist < bestDist) { bestDist = dist; best = td; }" +
+                        "});" +
+                        "return best;",
+                columnHeaderText, rowIndex
+        );
+
+        if (result == null) {
+            throw new NoSuchElementException(
+                    "Could not resolve grid cell for column header: '" + columnHeaderText + "' at row " + rowIndex
+            );
+        }
+        return (WebElement) result;
+    }
+
+    public void clickGridColumnDropdown(WebDriver driver, String columnHeaderText, int rowIndex) {
+        WebDriverCommonLibrary webDriverCommonLibrary;
+        WebElement cell = getVisibleCellByHeaderText(driver, columnHeaderText, rowIndex);
+
+        // scroll into view first — PrimeNG grids with horizontal scroll can have the
+        // matched cell technically "visible" per getBoundingClientRect but outside the
+        // current scrollable viewport
+        ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block: 'center', inline: 'center'});", cell);
+
+        WebElement trigger = cell.findElement(By.cssSelector("div.p-dropdown-trigger"));
+
+        // reuse your existing WaitUtils instead of a raw wait here
+        WebDriverWait wait = new WebDriverWait(driver,Duration.ofSeconds(20));
+        wait.until(ExpectedConditions.elementToBeClickable(trigger));
+        trigger.click();
+    }
+
 }

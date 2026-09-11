@@ -1,0 +1,74 @@
+{
+  "contractTestData": [
+    {
+      "testCaseId": "TC_CCM_001",
+      "productDetails": [
+        {
+          "product": "AC A ",
+          "units": "200",
+          "packing": "50 Kg Jute Bags",
+          "qty": "3434",
+          "uom": "Kg",
+          "noOfLots": "1000",
+          "price": "1220",
+          "targetType": "Arrival",
+          "targetDateRange": "today - today+4",
+          "tradeMonth": "",
+          "positionMonth": "",
+          "quality": "",
+          "certificationPremium": "No Certificates"
+        }
+      ]
+    },
+    {
+      "testCaseId": "TC_CCM_002",
+      "productDetails": [
+        {
+          "product": "AC AB ",
+          "units": "150",
+          "packing": "50 Kg Jute Bags",
+          "qty": "2000",
+          "uom": "Kg",
+          "noOfLots": "500",
+          "price": "980",
+          "targetType": "Delivery",
+          "targetDateRange": "today+1 - today+10",
+          "tradeMonth": "",
+          "positionMonth": "",
+          "quality": "",
+          "certificationPremium": "No Certificates"
+        },
+        {
+          "product": "AC RAW",
+          "units": "200",
+          "packing": "50 Kg Jute Bags",
+          "qty": "3434",
+          "uom": "Kg",
+          "noOfLots": "1000",
+          "price": "1220",
+          "targetType": "Arrival",
+          "targetDateRange": "today - today+4",
+          "tradeMonth": "",
+          "positionMonth": "",
+          "quality": "",
+          "certificationPremium": "No Certificates"
+        },
+        {
+          "product": "AC AAB",
+          "units": "250",
+          "packing": "50 Kg Jute Bags",
+          "qty": "5000",
+          "uom": "Kg",
+          "noOfLots": "1500",
+          "price": "1350",
+          "targetType": "Delivery",
+          "targetDateRange": "today+2 - today+12",
+          "tradeMonth": "",
+          "positionMonth": "",
+          "quality": "",
+          "certificationPremium": "No Certificates"
+        }
+      ]
+    }
+  ]
+}
